@@ -9,13 +9,19 @@ import {
 import { UserRow, SpreadsheetConfig } from './types';
 import { initAuth, googleSignIn, logout as googleSignOut, getAccessToken } from './lib/firebase';
 import { 
-  fetchUserRows, createDatabaseSpreadsheet, appendUserRow, 
+  fetchUserRows, fetchPublicUserRows, createDatabaseSpreadsheet, appendUserRow, 
   overwriteUsers, extractSpreadsheetId 
 } from './lib/googleSheets';
 
 import MemberLogin from './components/MemberLogin';
 import MemberProfile from './components/MemberProfile';
 import AdminConsole from './components/AdminConsole';
+
+// =========================================================================
+// ⚙️ [구글 스프레드시트 아이디 설정]
+// - 구글 로그인 후 연결하여 관리하면 자동으로 브라우저에 연동 스프레드시트가 기록됩니다.
+// =========================================================================
+const DEFAULT_SPREADSHEET_ID = '1gS-oYF-mX4K_qU-CenWbU70Q9B-7A_your_real_sheet_id_here'; // <- 기본값은 비워두고 로컬스토리지 설정을 우선시합니다.
 
 // Preloaded mock database for instant interactive trial
 const INITIAL_MOCK_USERS: UserRow[] = [
@@ -46,7 +52,10 @@ const INITIAL_MOCK_USERS: UserRow[] = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'user' | 'admin'>('user');
+  const [activeTab, setActiveTab] = useState<'user' | 'admin'>(() => {
+    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    return params.get('admin') === 'true' ? 'admin' : 'user';
+  });
   
   // Google Auth & Sync States
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
@@ -72,17 +81,27 @@ export default function App() {
 
   // 1. Initial Load: Check localStorage and Initialize Auth
   useEffect(() => {
-    // A. Restore spreadsheet configurations from localstorage
-    const savedSheetId = localStorage.getItem('g_sheets_connected_id');
-    const savedSheetUrl = localStorage.getItem('g_sheets_connected_url');
-    const savedSheetTitle = localStorage.getItem('g_sheets_connected_title');
+    // A. Parse Sheet ID from URL parameters, fallback to localStorage, then fallback to DEFAULT_SPREADSHEET_ID
+    const params = new URLSearchParams(window.location.search);
+    const urlSheetId = params.get('sheetId');
     
-    if (savedSheetId && savedSheetUrl && savedSheetTitle) {
+    const savedSheetId = urlSheetId || localStorage.getItem('g_sheets_connected_id') || DEFAULT_SPREADSHEET_ID;
+    const savedSheetUrl = localStorage.getItem('g_sheets_connected_url') || `https://docs.google.com/spreadsheets/d/${savedSheetId}/edit`;
+    const savedSheetTitle = localStorage.getItem('g_sheets_connected_title') || '연동된 회원 데이터베이스';
+    
+    if (savedSheetId && savedSheetId !== '1gS-oYF-mX4K_qU-CenWbU70Q9B-7A_your_real_sheet_id_here') {
       setConnectedSheet({
         spreadsheetId: savedSheetId,
         spreadsheetUrl: savedSheetUrl,
         title: savedSheetTitle
       });
+
+      // Save to localStorage if it came from URL
+      if (urlSheetId) {
+        localStorage.setItem('g_sheets_connected_id', urlSheetId);
+        localStorage.setItem('g_sheets_connected_url', savedSheetUrl);
+        localStorage.setItem('g_sheets_connected_title', savedSheetTitle);
+      }
     }
 
     // B. Check localstorage for cached user states (keeps things working offline/guest-mode)
@@ -95,6 +114,21 @@ export default function App() {
       }
     }
 
+    // Direct fetch right away using public CSV method as a silent background sync (never blocks login or shows annoying error)
+    if (savedSheetId && savedSheetId !== '1gS-oYF-mX4K_qU-CenWbU70Q9B-7A_your_real_sheet_id_here') {
+      fetchPublicUserRows(savedSheetId)
+        .then(rows => {
+          if (rows && rows.length > 0) {
+            setUsers(rows);
+            setIsDataLoadedFromSheet(true);
+            localStorage.setItem('g_sheets_cached_users', JSON.stringify(rows));
+          }
+        })
+        .catch(err => {
+          console.warn('Initial public sheets fetch skipped (using cached/default data instead):', err);
+        });
+    }
+
     // C. Subscribe to Google Firebase Auth
     const unsubscribe = initAuth(
       async (user, token) => {
@@ -102,8 +136,8 @@ export default function App() {
         setAdminUser(user);
         setGoogleToken(token);
         
-        // If we have a saved sheet, immediately fetch the live rows
-        if (savedSheetId) {
+        // If we have a saved sheet, fetch authenticated to get live rows
+        if (savedSheetId && savedSheetId !== '1gS-oYF-mX4K_qU-CenWbU70Q9B-7A_your_real_sheet_id_here') {
           await syncWithSpreadsheet(token, savedSheetId);
         }
       },
@@ -123,19 +157,30 @@ export default function App() {
     setTimeout(() => setToastMsg(''), 4000);
   };
 
-  // 2. Fetch Spreadsheet data helper
-  const syncWithSpreadsheet = async (token: string, sheetId: string): Promise<boolean> => {
+  // 2. Fetch Spreadsheet data helper (supports both token AND direct read-only fallback)
+  const syncWithSpreadsheet = async (token: string | null, sheetId: string): Promise<boolean> => {
     setIsLoading(true);
     setErrorMsg('');
     try {
-      const rows = await fetchUserRows(token, sheetId);
+      let rows: UserRow[] = [];
+      if (token) {
+        // Authenticated Google Sheets API
+        rows = await fetchUserRows(token, sheetId);
+      } else {
+        // Public Google Sheets CSV Export
+        rows = await fetchPublicUserRows(sheetId);
+      }
       setUsers(rows);
       setIsDataLoadedFromSheet(true);
       localStorage.setItem('g_sheets_cached_users', JSON.stringify(rows));
       return true;
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(err.message || '스프레더시트 동기화 실패. 공유 권한이나 ID를 재확인해 주세요.');
+      if (token) {
+        setErrorMsg(err.message || '스프레더시트 동기화 실패. 공유 권한("링크가 있는 모든 사용자 보기")이나 ID를 재확인해 주세요.');
+      } else {
+        console.warn('Silent background fall-back to cache:', err);
+      }
       return false;
     } finally {
       setIsLoading(false);
@@ -382,6 +427,48 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 탭 전환 버튼: URL 주소 끝에 ?admin=true 가 입력되었을 때만 디스크리트하게 상단에 노출합니다. */}
+      {typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('admin') === 'true' && (
+        <div className="w-full bg-white border-b border-slate-200/60 py-2.5 px-4 mb-2 flex justify-between items-center shadow-xs" id="admin_discreet_bar">
+          <div className="flex items-center gap-2 select-none">
+            <span className="p-1 bg-teal-100 text-teal-600 rounded">
+              <ShieldCheck className="w-4 h-4" />
+            </span>
+            <span className="text-xs font-bold text-slate-700 font-sans">관리자 설정 모드 활성화됨</span>
+          </div>
+          <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner gap-0.5" id="header_tab_selector">
+            <button
+              id="tab_user_btn"
+              onClick={() => {
+                setActiveTab('user');
+                setErrorMsg('');
+              }}
+              className={`px-4 py-1 rounded-lg text-xs font-semibold tracking-wide transition-all duration-200 cursor-pointer ${
+                activeTab === 'user'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              사용자 포털
+            </button>
+            <button
+              id="tab_admin_btn"
+              onClick={() => {
+                setActiveTab('admin');
+                setErrorMsg('');
+              }}
+              className={`px-4 py-1 rounded-lg text-xs font-semibold tracking-wide transition-all duration-200 cursor-pointer ${
+                activeTab === 'admin'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              관리자 설정
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* MAIN CONTENT AREA */}
       <main className="w-full max-w-6xl mx-auto px-4 py-6 flex-1 flex flex-col justify-start text-sans" id="app_main_content">
