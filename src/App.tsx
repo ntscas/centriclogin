@@ -431,11 +431,25 @@ export default function App() {
     setErrorMsg('');
     await new Promise(resolve => setTimeout(resolve, 800)); // fluid delay for premium micro-experience
 
-    // Matches telephone formatting
-    const match = users.find(u => 
-      u.phoneNumber.replace(/[^0-9]/g, '') === phoneNumber.replace(/[^0-9]/g, '') && 
-      u.password === password
-    );
+    // Resilient digit extractor & normalizer
+    const normalize = (phone: string) => {
+      let digits = phone.replace(/[^0-9]/g, '');
+      // If it starts with Korean country code e.g. 821012345678 -> convert to standard 01012345678
+      if (digits.startsWith('8210') && digits.length >= 11) {
+        digits = '0' + digits.slice(2);
+      }
+      return digits;
+    };
+
+    const targetPhoneNormalized = normalize(phoneNumber);
+    const targetPasswordNormalized = password.trim();
+
+    // Matches telephone formatting & password checks securely
+    const match = users.find(u => {
+      const dbPhoneNormalized = normalize(u.phoneNumber);
+      const dbPasswordNormalized = (u.password || '').trim();
+      return dbPhoneNormalized === targetPhoneNormalized && dbPasswordNormalized === targetPasswordNormalized;
+    });
 
     setIsLoading(false);
     if (match) {
@@ -674,6 +688,8 @@ export default function App() {
                     onRegister={handleAddUser}
                     isLoading={isLoading}
                     errorMsg={errorMsg}
+                    connectedSheet={connectedSheet}
+                    totalUsersCount={users.length}
                   />
                 )}
               </div>
