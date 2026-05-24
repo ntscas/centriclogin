@@ -11,13 +11,17 @@ interface MemberLoginProps {
   onRegister: (user: UserRow) => Promise<boolean>;
   isLoading: boolean;
   errorMsg: string;
+  connectedSheet: { title: string; spreadsheetId: string } | null;
+  totalUsersCount: number;
 }
 
 export default function MemberLogin({ 
   onLogin, 
   onRegister, 
   isLoading: isActionLoading, 
-  errorMsg
+  errorMsg,
+  connectedSheet,
+  totalUsersCount
 }: MemberLoginProps) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -132,6 +136,24 @@ export default function MemberLogin({
 
       {/* Forms Segment */}
       <div className="p-8" id="login_form_section">
+        {/* Active Database Feed indicator for diagnostic clarity */}
+        <div className="mb-6 p-4 rounded-2xl bg-slate-50 border border-slate-100/80 font-sans text-xs">
+          <div className="flex items-center gap-2.5">
+            <span className={`w-2.5 h-2.5 rounded-full ${connectedSheet ? 'bg-teal-500 animate-pulse' : 'bg-slate-400'}`} />
+            <div className="flex-1">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">액티브 로그인 데이터베이스</span>
+              <span className="text-slate-700 font-bold block truncate max-w-[280px]">
+                {connectedSheet ? connectedSheet.title : '기본 가상 데이터베이스'}
+              </span>
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                {connectedSheet 
+                  ? `동기화된 구글 시트 ID: ${connectedSheet.spreadsheetId.slice(0, 12)}... (${totalUsersCount}명 수록)` 
+                  : `기본 데모 데이터 활성화된 기록 (${totalUsersCount}명 수록)`}
+              </span>
+            </div>
+          </div>
+        </div>
+
         {/* Error notification banner */}
         {(errorMsg || localError) && (
           <motion.div 
