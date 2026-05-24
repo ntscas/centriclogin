@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Phone, Lock, Eye, EyeOff, UserPlus, LogIn, Sparkles, Building2, User, Mail, FileText } from 'lucide-react';
+import { 
+  Phone, Lock, Eye, EyeOff, UserPlus, LogIn, Sparkles, Building2, User, 
+  Mail, FileText, CheckCircle2 
+} from 'lucide-react';
 import { UserRow } from '../types';
 
 interface MemberLoginProps {
@@ -10,7 +13,12 @@ interface MemberLoginProps {
   errorMsg: string;
 }
 
-export default function MemberLogin({ onLogin, onRegister, isLoading: isActionLoading, errorMsg }: MemberLoginProps) {
+export default function MemberLogin({ 
+  onLogin, 
+  onRegister, 
+  isLoading: isActionLoading, 
+  errorMsg
+}: MemberLoginProps) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
