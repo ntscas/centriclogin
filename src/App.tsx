@@ -277,6 +277,49 @@ export default function App() {
     }
   };
 
+  // C2. Public Action: Connect an existing Sheet directly via URL or ID without requiring Google OAuth login!
+  const handleConnectPublicSpreadsheet = async (urlOrId: string): Promise<boolean> => {
+    const id = extractSpreadsheetId(urlOrId);
+    if (!id) {
+      setErrorMsg('올바르지 않은 시트 URL 또는 ID 형식입니다.');
+      return false;
+    }
+
+    setIsLoading(true);
+    setErrorMsg('');
+    try {
+      const rows = await fetchPublicUserRows(id);
+      if (!rows || rows.length === 0) {
+        throw new Error('시트에서 데이터를 읽지 못했습니다. 스프레드시트가 비어있거나, 헤더 행만 있거나, 이름/전화번호 열을 찾을 수 없습니다.');
+      }
+
+      const url = `https://docs.google.com/spreadsheets/d/${id}/edit`;
+      const config: SpreadsheetConfig = { 
+        spreadsheetId: id, 
+        spreadsheetUrl: url, 
+        title: '연동된 공개 구글시트' 
+      };
+
+      setConnectedSheet(config);
+      setUsers(rows);
+      setIsDataLoadedFromSheet(true);
+      
+      localStorage.setItem('g_sheets_connected_id', id);
+      localStorage.setItem('g_sheets_connected_url', url);
+      localStorage.setItem('g_sheets_connected_title', config.title);
+      localStorage.setItem('g_sheets_cached_users', JSON.stringify(rows));
+
+      triggerToast(`구글 시트 연동 성공! ${rows.length}명의 회원 정보가 동기화되었습니다.`);
+      return true;
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(err.message || '구글 시트 연동에 실패했습니다. 링크 공유 설정이 "링크가 있는 모든 사용자 보기(ビューワー / Viewer)" 상태인지 꼭 확인해 주세요.');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // D. Admin Action: Create a brand new database Spreadsheet Automatically
   const handleCreateSpreadsheet = async (): Promise<boolean> => {
     if (!googleToken) {
@@ -587,6 +630,7 @@ export default function App() {
                 onGoogleSignIn={handleGoogleSignIn}
                 onGoogleSignOut={handleGoogleSignOut}
                 onConnectSpreadsheet={handleConnectSpreadsheet}
+                onConnectPublicSpreadsheet={handleConnectPublicSpreadsheet}
                 onCreateSpreadsheet={handleCreateSpreadsheet}
                 onAddUser={handleAddUser}
                 onDeleteUser={handleDeleteUser}
