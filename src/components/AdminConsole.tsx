@@ -42,6 +42,7 @@ export default function AdminConsole({
   const [publicSpreadsheetInput, setPublicSpreadsheetInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedId, setCopiedId] = useState(false);
+  const [copiedShareUrl, setCopiedShareUrl] = useState(false);
   const [connectError, setConnectError] = useState('');
   const [publicConnectError, setPublicConnectError] = useState('');
   const [isPublicLinking, setIsPublicLinking] = useState(false);
@@ -59,6 +60,14 @@ export default function AdminConsole({
     navigator.clipboard.writeText(text);
     setCopiedId(true);
     setTimeout(() => setCopiedId(false), 2000);
+  };
+
+  const copyShareUrl = () => {
+    if (!spreadsheet) return;
+    const shareUrl = `${window.location.origin}${window.location.pathname}?sheetId=${spreadsheet.spreadsheetId}`;
+    navigator.clipboard.writeText(shareUrl);
+    setCopiedShareUrl(true);
+    setTimeout(() => setCopiedShareUrl(false), 2000);
   };
 
   const handleConnectSubmit = async (e: React.FormEvent) => {
@@ -253,6 +262,30 @@ export default function AdminConsole({
                   <ExternalLink className="w-3.5 h-3.5" />
                   스프레드시트 열기
                 </a>
+
+                {/* 다른 컴퓨터/디바이스 공유 연동 링크 지원 */}
+                <div className="pt-3 border-t border-teal-100/60 text-xs">
+                  <span className="block text-[10px] font-bold text-slate-500 mb-1">🔗 타 컴퓨터/디바이스 연동 공유 링크:</span>
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      readOnly
+                      value={`${window.location.origin}${window.location.pathname}?sheetId=${spreadsheet.spreadsheetId}`}
+                      className="flex-1 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] text-slate-500 font-mono truncate focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={copyShareUrl}
+                      className="px-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white text-[10.5px] font-semibold rounded-lg transition flex items-center gap-1 cursor-pointer shrink-0"
+                    >
+                      <Copy className="w-3 h-3" />
+                      {copiedShareUrl ? '복사됨' : '복사'}
+                    </button>
+                  </div>
+                  <p className="text-[9.5px] text-slate-400 mt-1 leading-relaxed">
+                    위 링크를 복사하여 다른 기기나 사용자에게 전달하면, <b>복잡한 설정 없이</b> 동일한 구글 시트 데이터 기반으로 즉시 로그인이 가능합니다.
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="p-4 rounded-2xl bg-amber-50/40 border border-amber-100 text-amber-800 text-xs font-sans leading-relaxed flex items-start gap-2.5">
