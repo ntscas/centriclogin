@@ -16,6 +16,7 @@ interface AdminConsoleProps {
   onGoogleSignIn: () => void;
   onGoogleSignOut: () => void;
   onConnectSpreadsheet: (urlOrId: string) => Promise<boolean>;
+  onConnectPublicSpreadsheet: (urlOrId: string) => Promise<boolean>;
   onCreateSpreadsheet: () => Promise<boolean>;
   onAddUser: (user: UserRow) => Promise<boolean>;
   onDeleteUser: (phoneNumber: string) => Promise<boolean>;
@@ -31,15 +32,19 @@ export default function AdminConsole({
   onGoogleSignIn,
   onGoogleSignOut,
   onConnectSpreadsheet,
+  onConnectPublicSpreadsheet,
   onCreateSpreadsheet,
   onAddUser,
   onDeleteUser,
   onRefreshData,
 }: AdminConsoleProps) {
   const [spreadsheetInput, setSpreadsheetInput] = useState('');
+  const [publicSpreadsheetInput, setPublicSpreadsheetInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedId, setCopiedId] = useState(false);
   const [connectError, setConnectError] = useState('');
+  const [publicConnectError, setPublicConnectError] = useState('');
+  const [isPublicLinking, setIsPublicLinking] = useState(false);
   
   // New User Form Modal/State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -68,6 +73,28 @@ export default function AdminConsole({
       setSpreadsheetInput('');
     } else {
       setConnectError('스프레드시트를 연결할 수 없습니다. 공유 설정을 확인해 주세요.');
+    }
+  };
+
+  const handlePublicConnectSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPublicConnectError('');
+    if (!publicSpreadsheetInput.trim()) {
+      setPublicConnectError('구글 시트 URL 또는 ID를 입력해 주세요.');
+      return;
+    }
+    setIsPublicLinking(true);
+    try {
+      const success = await onConnectPublicSpreadsheet(publicSpreadsheetInput);
+      if (success) {
+        setPublicSpreadsheetInput('');
+      } else {
+        setPublicConnectError('구글 시트 연동 실패: 데이터가 비어있거나 공유설정("링크가 있는 모든 사용자 보기") 상태인지 꼭 확인해 주세요.');
+      }
+    } catch (err: any) {
+      setPublicConnectError(err.message || '오류가 발생했습니다.');
+    } finally {
+      setIsPublicLinking(false);
     }
   };
 
@@ -236,16 +263,17 @@ export default function AdminConsole({
 
             {/* CONNECT FORM / PROVIOSION BTN */}
             <div className="space-y-4" id="sheet_action_forms">
+              {/* Option A: Full write-access auth connect */}
               <form onSubmit={handleConnectSubmit} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 font-sans">
-                    기존 구글 스프레드시트 연동
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 font-sans">
+                    구글 API 계정형 연동 (쓰기/일기 권한)
                   </label>
                   <div className="relative">
                     <input
                       required
                       type="text"
-                      placeholder="구글 시트 URL 또는 ID 입력"
+                      placeholder="스프레드시트 주소(URL) 또는 ID 입력"
                       value={spreadsheetInput}
                       onChange={(e) => setSpreadsheetInput(e.target.value)}
                       className="w-full pr-10 pl-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none text-xs text-slate-800"
@@ -256,6 +284,38 @@ export default function AdminConsole({
                   </div>
                   {connectError && (
                     <p className="text-rose-500 text-[10px] font-sans mt-1.5">{connectError}</p>
+                  )}
+                </div>
+              </form>
+
+              {/* Option B: Direct reader public link connect */}
+              <form onSubmit={handlePublicConnectSubmit} className="space-y-3 pt-3 border-t border-slate-100">
+                <div>
+                  <label className="block text-xs font-bold text-teal-700 mb-1.5 font-sans">
+                    공개 공유링크 직접 연동 (로그인 생략형)
+                  </label>
+                  <p className="text-[10px] text-slate-400 leading-relaxed mb-2 font-sans">
+                    시트 권한이 "링크가 있는 모든 사용자 - 뷰어" 상태이면 구글계정 로그인 없이 즉시 조회 가능합니다.
+                  </p>
+                  <div className="relative">
+                    <input
+                      required
+                      type="text"
+                      placeholder="https://docs.google.com/spreadsheets/d/..."
+                      value={publicSpreadsheetInput}
+                      onChange={(e) => setPublicSpreadsheetInput(e.target.value)}
+                      className="w-full pr-10 pl-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none text-xs text-slate-800"
+                    />
+                    <button type="submit" disabled={isPublicLinking} className="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-teal-600 transition cursor-pointer">
+                      {isPublicLinking ? (
+                        <span className="w-3.5 h-3.5 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                  {publicConnectError && (
+                    <p className="text-rose-500 text-[10px] font-sans mt-1.5 leading-normal">{publicConnectError}</p>
                   )}
                 </div>
               </form>
@@ -420,24 +480,65 @@ export default function AdminConsole({
         </div>
       ) : (
         /* NOT AUTHENTICATED STATE IN ADMIN CONSOLE */
-        <div className="py-24 border border-dashed border-slate-200 rounded-3xl bg-white/50 text-center flex flex-col items-center justify-center p-8 space-y-4" id="admin_console_guest_prompt">
-          <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center">
+        <div className="py-12 border border-dashed border-slate-200 rounded-3xl bg-white shadow-sm text-center flex flex-col items-center justify-center p-8 max-w-2xl mx-auto space-y-6" id="admin_console_guest_prompt">
+          <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
             <KeyRound className="w-8 h-8" />
           </div>
-          <div>
-            <h4 className="text-md font-bold text-slate-800 font-sans">스프레드시트 데이터베이스 제어</h4>
-            <p className="text-xs text-slate-400 font-sans mt-1 max-w-sm mx-auto">
-              구글 드라이브에 저장된 로그인 데이터 시트를 안전하게 조회하거나, 임의의 행 수정/추가를 진행하시려면 구글 아이디로 연동해 주셔야 합니다.
+          <div className="space-y-1">
+            <h4 className="text-base font-bold text-slate-800 font-sans">구글 스프레드시트 데이터베이스 지정</h4>
+            <p className="text-xs text-slate-400 font-sans max-w-md mx-auto">
+              구글 드라이브 시트에 회원/사용자 데이터를 안전하게 저장하고 조회합니다.
+              로그인 생략형(공개 공유링크) 또는 구글 API 연동 방식을 선택해 지정해 주세요.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onGoogleSignIn}
-            className="py-3 px-6 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2 cursor-pointer shadow-md"
-          >
-            <Database className="w-4 h-4 text-teal-400" />
-            구글 연동하여 설정 시작하기
-          </button>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full pt-4 border-t border-slate-100">
+            {/* Left: Google Sign-In */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/60 flex flex-col items-center justify-between space-y-4">
+              <div className="text-center">
+                <span className="text-[11px] font-bold text-slate-500 uppercase font-mono block mb-1">방법 1. 구글 인증형 (읽기/쓰기 가능)</span>
+                <p className="text-[10px] text-slate-400 font-sans">관리자 권한의 구글 계정으로 연결하여 실시간 저장 및 엑셀 수정 제어가 가능합니다.</p>
+              </div>
+              <button
+                type="button"
+                onClick={onGoogleSignIn}
+                className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+              >
+                <Database className="w-4 h-4 text-teal-400" />
+                구글 연동 로그인
+              </button>
+            </div>
+
+            {/* Right: Direct Public Connection */}
+            <div className="p-4 bg-teal-50/20 rounded-2xl border border-teal-100/50 flex flex-col items-center justify-between space-y-4">
+              <div className="text-center">
+                <span className="text-[11px] font-bold text-teal-700 uppercase font-mono block mb-1">방법 2. 공유링크 직접 연동 (조회 전용)</span>
+                <p className="text-[10px] text-slate-400 font-sans">구글 로그인 없이 시트 공유 설정을 "링크가 있는 모든 사용자 - 뷰어"로 하신 후 바로 사용합니다.</p>
+              </div>
+              <form onSubmit={handlePublicConnectSubmit} className="w-full space-y-1.5">
+                <div className="relative">
+                  <input
+                    required
+                    type="text"
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                    value={publicSpreadsheetInput}
+                    onChange={(e) => setPublicSpreadsheetInput(e.target.value)}
+                    className="w-full pr-10 pl-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-teal-500 outline-none text-xs text-slate-800 font-sans shadow-2xs"
+                  />
+                  <button type="submit" disabled={isPublicLinking} className="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-teal-600 transition cursor-pointer">
+                    {isPublicLinking ? (
+                      <span className="w-3.5 h-3.5 border-1.5 border-teal-600 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 text-teal-600" />
+                    )}
+                  </button>
+                </div>
+                {publicConnectError && (
+                  <p className="text-rose-500 text-[10px] font-sans text-left leading-normal">{publicConnectError}</p>
+                )}
+              </form>
+            </div>
+          </div>
         </div>
       )}
 
