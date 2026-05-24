@@ -644,19 +644,16 @@ export default function App() {
                           조세전문가
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => setIframeSrc('https://centrictax.vercel.app/')}
-                          className={`px-4 py-2 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm ${
-                            iframeSrc === 'https://centrictax.vercel.app/'
-                              ? 'bg-teal-600 text-white ring-1 ring-teal-600'
-                              : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
-                          }`}
+                        <a
+                          href="https://centrictax.vercel.app/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm"
                           id="view_centric_ai_btn"
                         >
-                          <Sparkles className="w-3.5 h-3.5" />
+                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                           CENTRIC AI
-                        </button>
+                        </a>
 
                         <button
                           type="button"
@@ -681,7 +678,7 @@ export default function App() {
                         className="w-full flex-1 border-0 min-h-[650px]"
                         id="embedded_centric_pro_frame"
                         allow="fullscreen; clipboard-read; clipboard-write;"
-                        sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                        sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox allow-top-navigation allow-top-navigation-by-user-activation"
                       />
                     </div>
                   </div>
