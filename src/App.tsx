@@ -22,35 +22,10 @@ import AdminConsole from './components/AdminConsole';
 // ⚙️ [구글 스프레드시트 아이디 설정]
 // - 구글 로그인 후 연결하여 관리하면 자동으로 브라우저에 연동 스프레드시트가 기록됩니다.
 // =========================================================================
-const DEFAULT_SPREADSHEET_ID = '1gS-oYF-mX4K_qU-CenWbU70Q9B-7A_your_real_sheet_id_here'; // <- 기본값은 비워두고 로컬스토리지 설정을 우선시합니다.
+const DEFAULT_SPREADSHEET_ID = '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
 
 // Preloaded mock database for instant interactive trial
-const INITIAL_MOCK_USERS: UserRow[] = [
-  {
-    phoneNumber: '010-1234-5678',
-    password: '1234',
-    name: '김이음',
-    email: 'manger@company.com',
-    otherInfo: '영업기획팀 부장 (우수사원)',
-    registeredDate: '2026-05-10'
-  },
-  {
-    phoneNumber: '010-9876-5432',
-    password: '5678',
-    name: '이지수',
-    email: 'jisu@company.com',
-    otherInfo: '인재개발팀 대리',
-    registeredDate: '2026-05-15'
-  },
-  {
-    phoneNumber: '010-5555-5555',
-    password: '0000',
-    name: '박강현',
-    email: 'kang@service.net',
-    otherInfo: '임시 협력업체 개발본부장',
-    registeredDate: '2026-05-20'
-  }
-];
+const INITIAL_MOCK_USERS: UserRow[] = [];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'user' | 'admin'>(() => {
@@ -116,7 +91,7 @@ export default function App() {
 
       if (!isSubscribed) return;
 
-      if (savedSheetId && savedSheetId !== '1gS-oYF-mX4K_qU-CenWbU70Q9B-7A_your_real_sheet_id_here') {
+      if (savedSheetId) {
         const config: SpreadsheetConfig = {
           spreadsheetId: savedSheetId,
           spreadsheetUrl: savedSheetUrl,
@@ -132,7 +107,7 @@ export default function App() {
         }
       }
 
-      // Load cached local user records as immediate fast mockup fallback
+      // Load cached local user records as immediate fast fallback
       const cachedUsers = localStorage.getItem('g_sheets_cached_users');
       if (cachedUsers && isSubscribed) {
         try {
@@ -143,7 +118,7 @@ export default function App() {
       }
 
       // Background download of actual Google sheet user database entries (so logins actually work live!)
-      if (savedSheetId && savedSheetId !== '1gS-oYF-mX4K_qU-CenWbU70Q9B-7A_your_real_sheet_id_here') {
+      if (savedSheetId) {
         try {
           const rows = await fetchPublicUserRows(savedSheetId);
           if (rows && rows.length > 0 && isSubscribed) {
@@ -164,7 +139,7 @@ export default function App() {
           setAdminUser(user);
           setGoogleToken(token);
           
-          if (savedSheetId && savedSheetId !== '1gS-oYF-mX4K_qU-CenWbU70Q9B-7A_your_real_sheet_id_here') {
+          if (savedSheetId) {
             await syncWithSpreadsheet(token, savedSheetId);
           }
         },
@@ -399,6 +374,18 @@ export default function App() {
       localStorage.setItem('g_sheets_connected_url', result.spreadsheetUrl);
       localStorage.setItem('g_sheets_connected_title', config.title);
 
+      // Save global configuration in Firestore setting so other computers sync automatically!
+      try {
+        await setDoc(doc(db, 'settings', 'spreadsheet_config'), {
+          spreadsheetId: result.spreadsheetId,
+          spreadsheetUrl: result.spreadsheetUrl,
+          title: '구글시트 로그인 사용자 DB',
+          updatedAt: new Date().toISOString()
+        });
+      } catch (fsErr) {
+        console.error('Failed to write global configuration to Firestore settings document:', fsErr);
+      }
+
       // Force refresh (it will find empty header rows)
       await syncWithSpreadsheet(googleToken, result.spreadsheetId);
       triggerToast('Google Drive에 사용자 DB 시트가 생성되었습니다!');
@@ -429,7 +416,6 @@ export default function App() {
   const handleUserLogin = async (phoneNumber: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     setErrorMsg('');
-    await new Promise(resolve => setTimeout(resolve, 800)); // fluid delay for premium micro-experience
 
     // Resilient digit extractor & normalizer
     const normalize = (phone: string) => {
@@ -444,8 +430,25 @@ export default function App() {
     const targetPhoneNormalized = normalize(phoneNumber);
     const targetPasswordNormalized = password.trim();
 
+    let activeUsers = users;
+
+    // Direct Real-time Google Sheets Fetch to ensure that users newly added/edited inside the Sheet can log in instantly!
+    const sheetIdToFetch = connectedSheet?.spreadsheetId || DEFAULT_SPREADSHEET_ID;
+    if (sheetIdToFetch) {
+      try {
+        const rows = await fetchPublicUserRows(sheetIdToFetch);
+        if (rows && rows.length > 0) {
+          activeUsers = rows;
+          setUsers(rows);
+          localStorage.setItem('g_sheets_cached_users', JSON.stringify(rows));
+        }
+      } catch (err) {
+        console.warn('Real-time sheet check failed on login attempt, falling back to local cache:', err);
+      }
+    }
+
     // Matches telephone formatting & password checks securely
-    const match = users.find(u => {
+    const match = activeUsers.find(u => {
       const dbPhoneNormalized = normalize(u.phoneNumber);
       const dbPasswordNormalized = (u.password || '').trim();
       return dbPhoneNormalized === targetPhoneNormalized && dbPasswordNormalized === targetPasswordNormalized;
