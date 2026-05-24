@@ -156,12 +156,12 @@ export async function fetchUserRows(token: string, spreadsheetId: string): Promi
   return rows
     .filter(row => row[finalPIndex]) // skip empty records
     .map(row => ({
-      phoneNumber: row[finalPIndex]?.trim() || '',
-      password: row[finalPassIndex] || '',
-      name: row[finalNIndex] || '',
-      email: row[finalEIndex] || '',
-      otherInfo: row[finalOIndex] || '',
-      registeredDate: row[finalRIndex] || '',
+      phoneNumber: row[finalPIndex] ? String(row[finalPIndex]).trim() : '',
+      password: row[finalPassIndex] ? String(row[finalPassIndex]).trim() : '',
+      name: row[finalNIndex] ? String(row[finalNIndex]).trim() : '',
+      email: row[finalEIndex] ? String(row[finalEIndex]).trim() : '',
+      otherInfo: row[finalOIndex] ? String(row[finalOIndex]).trim() : '',
+      registeredDate: row[finalRIndex] ? String(row[finalRIndex]).trim() : '',
     }));
 }
 
@@ -332,12 +332,12 @@ function parseCSV(text: string): UserRow[] {
   return rows
     .filter(r => r[finalPIndex])
     .map(r => ({
-      phoneNumber: r[finalPIndex]?.trim() || '',
-      password: r[finalPassIndex] || '',
-      name: r[finalNIndex] || '',
-      email: r[finalEIndex] || '',
-      otherInfo: r[finalOIndex] || '',
-      registeredDate: r[finalRIndex] || '',
+      phoneNumber: r[finalPIndex] ? String(r[finalPIndex]).trim() : '',
+      password: r[finalPassIndex] ? String(r[finalPassIndex]).trim() : '',
+      name: r[finalNIndex] ? String(r[finalNIndex]).trim() : '',
+      email: r[finalEIndex] ? String(r[finalEIndex]).trim() : '',
+      otherInfo: r[finalOIndex] ? String(r[finalOIndex]).trim() : '',
+      registeredDate: r[finalRIndex] ? String(r[finalRIndex]).trim() : '',
     }));
 }
 
