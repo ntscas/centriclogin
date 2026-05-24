@@ -219,3 +219,88 @@ export async function overwriteUsers(token: string, spreadsheetId: string, users
     throw new Error(`Failed to update users sheet: ${errorText}`);
   }
 }
+
+/**
+ * Robust CSV parser for Google Sheets public export
+ */
+function parseCSV(text: string): UserRow[] {
+  const lines: string[][] = [];
+  let row: string[] = [];
+  let inQuotes = false;
+  let currentVal = '';
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentVal += '"';
+        i++; // skip next quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      row.push(currentVal);
+      currentVal = '';
+    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') {
+        i++;
+      }
+      row.push(currentVal);
+      lines.push(row);
+      row = [];
+      currentVal = '';
+    } else {
+      currentVal += char;
+    }
+  }
+  if (currentVal || row.length > 0) {
+    row.push(currentVal);
+    lines.push(row);
+  }
+
+  if (lines.length === 0) return [];
+  const header = lines[0];
+  const rows = lines.slice(1);
+
+  const pIndex = header.findIndex(h => h.includes('전화번호')) >= 0 ? header.findIndex(h => h.includes('전화번호')) : 0;
+  const passIndex = header.findIndex(h => h.includes('비밀번호')) >= 0 ? header.findIndex(h => h.includes('비밀번호')) : 1;
+  const nIndex = header.findIndex(h => h.includes('이름')) >= 0 ? header.findIndex(h => h.includes('이름')) : 2;
+  const eIndex = header.findIndex(h => h.includes('이메일')) >= 0 ? header.findIndex(h => h.includes('이메일')) : 3;
+  const oIndex = header.findIndex(h => h.includes('기타')) >= 0 ? header.findIndex(h => h.includes('기타')) : 4;
+  const rIndex = header.findIndex(h => h.includes('등록')) >= 0 ? header.findIndex(h => h.includes('등록')) : 5;
+
+  return rows
+    .filter(r => r[pIndex])
+    .map(r => ({
+      phoneNumber: r[pIndex]?.trim() || '',
+      password: r[passIndex] || '',
+      name: r[nIndex] || '',
+      email: r[eIndex] || '',
+      otherInfo: r[oIndex] || '',
+      registeredDate: r[rIndex] || '',
+    }));
+}
+
+/**
+ * Fetches spreadsheet rows from a publicly shared spreadsheet link
+ */
+export async function fetchPublicUserRows(spreadsheetId: string): Promise<UserRow[]> {
+  // Try fetching the 'Users' tab first
+  const urlWithSheetName = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&sheet=Users`;
+  let response = await fetch(urlWithSheetName);
+  
+  if (!response.ok) {
+    // Fallback: download the first active sheet/tab (does not filter by tab name)
+    const urlDefault = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv`;
+    response = await fetch(urlDefault);
+  }
+
+  if (!response.ok) {
+    throw new Error('전화번호/비밀번호 데이터베이스를 구글 시트에서 가져오는 데 실패했습니다. 시트 공유 설정이 "링크가 있는 모든 사용자 보기(뷰어)"로 구성되어 있는지 확인해 주세요.');
+  }
+  const text = await response.text();
+  return parseCSV(text);
+}
+
