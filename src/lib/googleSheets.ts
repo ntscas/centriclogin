@@ -117,22 +117,51 @@ export async function fetchUserRows(token: string, spreadsheetId: string): Promi
   const rows = values.slice(1);
 
   // Maps columns based on header strings or use default indices as fallback
-  const pIndex = header.findIndex(h => h.includes('전화번호')) >= 0 ? header.findIndex(h => h.includes('전화번호')) : 0;
-  const passIndex = header.findIndex(h => h.includes('비밀번호')) >= 0 ? header.findIndex(h => h.includes('비밀번호')) : 1;
-  const nIndex = header.findIndex(h => h.includes('이름')) >= 0 ? header.findIndex(h => h.includes('이름')) : 2;
-  const eIndex = header.findIndex(h => h.includes('이메일')) >= 0 ? header.findIndex(h => h.includes('이메일')) : 3;
-  const oIndex = header.findIndex(h => h.includes('기타')) >= 0 ? header.findIndex(h => h.includes('기타')) : 4;
-  const rIndex = header.findIndex(h => h.includes('등록')) >= 0 ? header.findIndex(h => h.includes('등록')) : 5;
+  const pIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('전화번호') || s.includes('phone') || s.includes('연락처') || s.includes('tel') || s.includes('mobile') || s.includes('contact');
+  });
+  const finalPIndex = pIndex >= 0 ? pIndex : 0;
+
+  const passIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('비밀번호') || s.includes('password') || s.includes('pw') || s.includes('pass') || s.includes('비번');
+  });
+  const finalPassIndex = passIndex >= 0 ? passIndex : 1;
+
+  const nIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('이름') || s.includes('name') || s.includes('성명') || s.includes('고객') || s.includes('회원');
+  });
+  const finalNIndex = nIndex >= 0 ? nIndex : 2;
+
+  const eIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('이메일') || s.includes('email') || s.includes('mail');
+  });
+  const finalEIndex = eIndex >= 0 ? eIndex : 3;
+
+  const oIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('기타') || s.includes('info') || s.includes('note') || s.includes('소속') || s.includes('설명') || s.includes('메모') || s.includes('직급');
+  });
+  const finalOIndex = oIndex >= 0 ? oIndex : 4;
+
+  const rIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('등록') || s.includes('date') || s.includes('가입') || s.includes('시간') || s.includes('일자');
+  });
+  const finalRIndex = rIndex >= 0 ? rIndex : 5;
 
   return rows
-    .filter(row => row[pIndex]) // skip empty records
+    .filter(row => row[finalPIndex]) // skip empty records
     .map(row => ({
-      phoneNumber: row[pIndex]?.trim() || '',
-      password: row[passIndex] || '',
-      name: row[nIndex] || '',
-      email: row[eIndex] || '',
-      otherInfo: row[oIndex] || '',
-      registeredDate: row[rIndex] || '',
+      phoneNumber: row[finalPIndex]?.trim() || '',
+      password: row[finalPassIndex] || '',
+      name: row[finalNIndex] || '',
+      email: row[finalEIndex] || '',
+      otherInfo: row[finalOIndex] || '',
+      registeredDate: row[finalRIndex] || '',
     }));
 }
 
@@ -264,22 +293,51 @@ function parseCSV(text: string): UserRow[] {
   const header = lines[0];
   const rows = lines.slice(1);
 
-  const pIndex = header.findIndex(h => h.includes('전화번호')) >= 0 ? header.findIndex(h => h.includes('전화번호')) : 0;
-  const passIndex = header.findIndex(h => h.includes('비밀번호')) >= 0 ? header.findIndex(h => h.includes('비밀번호')) : 1;
-  const nIndex = header.findIndex(h => h.includes('이름')) >= 0 ? header.findIndex(h => h.includes('이름')) : 2;
-  const eIndex = header.findIndex(h => h.includes('이메일')) >= 0 ? header.findIndex(h => h.includes('이메일')) : 3;
-  const oIndex = header.findIndex(h => h.includes('기타')) >= 0 ? header.findIndex(h => h.includes('기타')) : 4;
-  const rIndex = header.findIndex(h => h.includes('등록')) >= 0 ? header.findIndex(h => h.includes('등록')) : 5;
+  const pIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('전화번호') || s.includes('phone') || s.includes('연락처') || s.includes('tel') || s.includes('mobile') || s.includes('contact');
+  });
+  const finalPIndex = pIndex >= 0 ? pIndex : 0;
+
+  const passIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('비밀번호') || s.includes('password') || s.includes('pw') || s.includes('pass') || s.includes('비번');
+  });
+  const finalPassIndex = passIndex >= 0 ? passIndex : 1;
+
+  const nIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('이름') || s.includes('name') || s.includes('성명') || s.includes('고객') || s.includes('회원');
+  });
+  const finalNIndex = nIndex >= 0 ? nIndex : 2;
+
+  const eIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('이메일') || s.includes('email') || s.includes('mail');
+  });
+  const finalEIndex = eIndex >= 0 ? eIndex : 3;
+
+  const oIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('기타') || s.includes('info') || s.includes('note') || s.includes('소속') || s.includes('설명') || s.includes('메모') || s.includes('직급');
+  });
+  const finalOIndex = oIndex >= 0 ? oIndex : 4;
+
+  const rIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('등록') || s.includes('date') || s.includes('가입') || s.includes('시간') || s.includes('일자');
+  });
+  const finalRIndex = rIndex >= 0 ? rIndex : 5;
 
   return rows
-    .filter(r => r[pIndex])
+    .filter(r => r[finalPIndex])
     .map(r => ({
-      phoneNumber: r[pIndex]?.trim() || '',
-      password: r[passIndex] || '',
-      name: r[nIndex] || '',
-      email: r[eIndex] || '',
-      otherInfo: r[oIndex] || '',
-      registeredDate: r[rIndex] || '',
+      phoneNumber: r[finalPIndex]?.trim() || '',
+      password: r[finalPassIndex] || '',
+      name: r[finalNIndex] || '',
+      email: r[finalEIndex] || '',
+      otherInfo: r[finalOIndex] || '',
+      registeredDate: r[finalRIndex] || '',
     }));
 }
 

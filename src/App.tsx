@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 
 import { UserRow, SpreadsheetConfig } from './types';
-import { initAuth, googleSignIn, logout as googleSignOut, getAccessToken } from './lib/firebase';
+import { initAuth, googleSignIn, logout as googleSignOut, getAccessToken, db } from './lib/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { 
   fetchUserRows, fetchPublicUserRows, createDatabaseSpreadsheet, appendUserRow, 
   overwriteUsers, extractSpreadsheetId 
@@ -79,76 +80,109 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState('');
   const [toastMsg, setToastMsg] = useState('');
 
-  // 1. Initial Load: Check localStorage and Initialize Auth
+  // 1. Initial Load: Check Firestore database configuration + localStorage and Initialize Auth
   useEffect(() => {
-    // A. Parse Sheet ID from URL parameters, fallback to localStorage, then fallback to DEFAULT_SPREADSHEET_ID
-    const params = new URLSearchParams(window.location.search);
-    const urlSheetId = params.get('sheetId');
-    
-    const savedSheetId = urlSheetId || localStorage.getItem('g_sheets_connected_id') || DEFAULT_SPREADSHEET_ID;
-    const savedSheetUrl = localStorage.getItem('g_sheets_connected_url') || `https://docs.google.com/spreadsheets/d/${savedSheetId}/edit`;
-    const savedSheetTitle = localStorage.getItem('g_sheets_connected_title') || '연동된 회원 데이터베이스';
-    
-    if (savedSheetId && savedSheetId !== '1gS-oYF-mX4K_qU-CenWbU70Q9B-7A_your_real_sheet_id_here') {
-      setConnectedSheet({
-        spreadsheetId: savedSheetId,
-        spreadsheetUrl: savedSheetUrl,
-        title: savedSheetTitle
-      });
+    let activeSheetId = DEFAULT_SPREADSHEET_ID;
+    let activeSheetUrl = `https://docs.google.com/spreadsheets/d/${activeSheetId}/edit`;
+    let activeSheetTitle = '연동된 회원 데이터베이스';
+    let isSubscribed = true;
+    let authUnsubscribe: (() => void) | undefined;
 
-      // Save to localStorage if it came from URL
-      if (urlSheetId) {
-        localStorage.setItem('g_sheets_connected_id', urlSheetId);
-        localStorage.setItem('g_sheets_connected_url', savedSheetUrl);
-        localStorage.setItem('g_sheets_connected_title', savedSheetTitle);
-      }
-    }
-
-    // B. Check localstorage for cached user states (keeps things working offline/guest-mode)
-    const cachedUsers = localStorage.getItem('g_sheets_cached_users');
-    if (cachedUsers) {
+    const initializeAndLoad = async () => {
+      // 1. Fetch global sheet configuration from Firestore first (for other computers)
       try {
-        setUsers(JSON.parse(cachedUsers));
+        const docRef = doc(db, 'settings', 'spreadsheet_config');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && isSubscribed) {
+          const fsData = docSnap.data();
+          if (fsData.spreadsheetId) {
+            activeSheetId = fsData.spreadsheetId;
+            activeSheetUrl = fsData.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${fsData.spreadsheetId}/edit`;
+            activeSheetTitle = fsData.title || '연동된 회원 데이터베이스';
+            console.log('Successfully loaded global database Sheet ID from Firestore:', activeSheetId);
+          }
+        }
       } catch (err) {
-        console.error('Error parsing cached users:', err);
+        console.warn('Initial Firestore spreadsheet_config fetch skipped/failed (falling back to cache/local):', err);
       }
-    }
 
-    // Direct fetch right away using public CSV method as a silent background sync (never blocks login or shows annoying error)
-    if (savedSheetId && savedSheetId !== '1gS-oYF-mX4K_qU-CenWbU70Q9B-7A_your_real_sheet_id_here') {
-      fetchPublicUserRows(savedSheetId)
-        .then(rows => {
-          if (rows && rows.length > 0) {
+      // 2. Allow URL query parameter to force-override active sheet, fallback to localStorage, fallback to Firestore global setting
+      const params = new URLSearchParams(window.location.search);
+      const urlSheetId = params.get('sheetId');
+      
+      const savedSheetId = urlSheetId || localStorage.getItem('g_sheets_connected_id') || activeSheetId;
+      const savedSheetUrl = (savedSheetId === activeSheetId) ? activeSheetUrl : (localStorage.getItem('g_sheets_connected_url') || `https://docs.google.com/spreadsheets/d/${savedSheetId}/edit`);
+      const savedSheetTitle = (savedSheetId === activeSheetId) ? activeSheetTitle : (localStorage.getItem('g_sheets_connected_title') || '연동된 회원 데이터베이스');
+
+      if (!isSubscribed) return;
+
+      if (savedSheetId && savedSheetId !== '1gS-oYF-mX4K_qU-CenWbU70Q9B-7A_your_real_sheet_id_here') {
+        const config: SpreadsheetConfig = {
+          spreadsheetId: savedSheetId,
+          spreadsheetUrl: savedSheetUrl,
+          title: savedSheetTitle
+        };
+        setConnectedSheet(config);
+
+        // Keep local cache in sync
+        if (urlSheetId) {
+          localStorage.setItem('g_sheets_connected_id', urlSheetId);
+          localStorage.setItem('g_sheets_connected_url', savedSheetUrl);
+          localStorage.setItem('g_sheets_connected_title', savedSheetTitle);
+        }
+      }
+
+      // Load cached local user records as immediate fast mockup fallback
+      const cachedUsers = localStorage.getItem('g_sheets_cached_users');
+      if (cachedUsers && isSubscribed) {
+        try {
+          setUsers(JSON.parse(cachedUsers));
+        } catch (err) {
+          console.error('Error parsing cached users:', err);
+        }
+      }
+
+      // Background download of actual Google sheet user database entries (so logins actually work live!)
+      if (savedSheetId && savedSheetId !== '1gS-oYF-mX4K_qU-CenWbU70Q9B-7A_your_real_sheet_id_here') {
+        try {
+          const rows = await fetchPublicUserRows(savedSheetId);
+          if (rows && rows.length > 0 && isSubscribed) {
             setUsers(rows);
             setIsDataLoadedFromSheet(true);
             localStorage.setItem('g_sheets_cached_users', JSON.stringify(rows));
           }
-        })
-        .catch(err => {
-          console.warn('Initial public sheets fetch skipped (using cached/default data instead):', err);
-        });
-    }
-
-    // C. Subscribe to Google Firebase Auth
-    const unsubscribe = initAuth(
-      async (user, token) => {
-        setIsAdminAuthenticated(true);
-        setAdminUser(user);
-        setGoogleToken(token);
-        
-        // If we have a saved sheet, fetch authenticated to get live rows
-        if (savedSheetId && savedSheetId !== '1gS-oYF-mX4K_qU-CenWbU70Q9B-7A_your_real_sheet_id_here') {
-          await syncWithSpreadsheet(token, savedSheetId);
+        } catch (err) {
+          console.warn('Silent public sheets sync skipped (using cached/default data instead):', err);
         }
-      },
-      () => {
-        setIsAdminAuthenticated(false);
-        setAdminUser(null);
-        setGoogleToken(null);
       }
-    );
 
-    return () => unsubscribe();
+      // 3. Setup Firebase Auth listener
+      authUnsubscribe = initAuth(
+        async (user, token) => {
+          if (!isSubscribed) return;
+          setIsAdminAuthenticated(true);
+          setAdminUser(user);
+          setGoogleToken(token);
+          
+          if (savedSheetId && savedSheetId !== '1gS-oYF-mX4K_qU-CenWbU70Q9B-7A_your_real_sheet_id_here') {
+            await syncWithSpreadsheet(token, savedSheetId);
+          }
+        },
+        () => {
+          if (!isSubscribed) return;
+          setIsAdminAuthenticated(false);
+          setAdminUser(null);
+          setGoogleToken(null);
+        }
+      );
+    };
+
+    initializeAndLoad();
+
+    return () => {
+      isSubscribed = false;
+      if (authUnsubscribe) authUnsubscribe();
+    };
   }, []);
 
   // Quick Flash toast notifications
@@ -262,10 +296,22 @@ export default function App() {
       localStorage.setItem('g_sheets_connected_url', url);
       localStorage.setItem('g_sheets_connected_title', title);
 
+      // Save global configuration in Firestore setting so other computers sync automatically!
+      try {
+        await setDoc(doc(db, 'settings', 'spreadsheet_config'), {
+          spreadsheetId: id,
+          spreadsheetUrl: url,
+          title,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (fsErr) {
+        console.error('Failed to write global configuration to Firestore settings document:', fsErr);
+      }
+
       // Now load users
       const syncSuccess = await syncWithSpreadsheet(googleToken, id);
       if (syncSuccess) {
-        triggerToast(`스프레드시트 '${title}'와 연동되었습니다!`);
+        triggerToast(`스프레드시트 '${title}'와 연동되였으며, 다른 컴퓨터에서도 이 설정이 전역 적용됩니다!`);
       }
       return syncSuccess;
     } catch (err: any) {
@@ -309,7 +355,19 @@ export default function App() {
       localStorage.setItem('g_sheets_connected_title', config.title);
       localStorage.setItem('g_sheets_cached_users', JSON.stringify(rows));
 
-      triggerToast(`구글 시트 연동 성공! ${rows.length}명의 회원 정보가 동기화되었습니다.`);
+      // Save global configuration in Firestore setting so other computers sync automatically!
+      try {
+        await setDoc(doc(db, 'settings', 'spreadsheet_config'), {
+          spreadsheetId: id,
+          spreadsheetUrl: url,
+          title: config.title,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (fsErr) {
+        console.error('Failed to write global public configuration to Firestore settings document:', fsErr);
+      }
+
+      triggerToast(`구글 시트 연동 성공! 다른 컴퓨터 디바이스에도 전역 적용됩니다. (동계 회원수: ${rows.length}명)`);
       return true;
     } catch (err: any) {
       console.error(err);

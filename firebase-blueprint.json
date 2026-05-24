@@ -1,0 +1,34 @@
+{
+  "entities": {
+    "SpreadsheetConfig": {
+      "title": "Spreadsheet Connection Setting",
+      "description": "The active spreadsheet configured by the Admin for global sync",
+      "type": "object",
+      "properties": {
+        "spreadsheetId": {
+          "type": "string",
+          "description": "Google Spreadsheet ID representing user DB"
+        },
+        "spreadsheetUrl": {
+          "type": "string",
+          "description": "Google Spreadsheet URL for convenience"
+        },
+        "title": {
+          "type": "string",
+          "description": "Readable title of connected spreadsheet"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last configuration update"
+        }
+      },
+      "required": ["spreadsheetId", "spreadsheetUrl"]
+    }
+  },
+  "firestore": {
+    "/settings/spreadsheet_config": {
+      "schema": "SpreadsheetConfig",
+      "description": "Connection details for the synced Google sheets database"
+    }
+  }
+}
