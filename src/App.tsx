@@ -718,8 +718,8 @@ export default function App() {
       {/* FOOTER */}
       {!loggedInMember && (
         <footer className="mt-auto pt-12 text-center text-[11px] text-slate-400 font-mono" id="app_bottom_footer">
-          <p>© 2026 Google Sheets Login Portal. Designed with Inter & Space Grotesk slate styling.</p>
-          <p className="mt-1 opacity-80">This project complies with Google Workspace Auth policies & sandboxed previews.</p>
+          <p>CENTRIC Tax Network</p>
+          <p className="mt-1 opacity-80">N CENTRIC</p>
         </footer>
       )}
 
