@@ -7,7 +7,7 @@ import {
 import { UserRow } from '../types';
 
 interface MemberLoginProps {
-  onLogin: (phoneNumber: string, password: string) => Promise<boolean>;
+  onLogin: (phoneNumber: string, password: string, rememberMe: boolean) => Promise<boolean>;
   onRegister: (user: UserRow) => Promise<boolean>;
   isLoading: boolean;
   errorMsg: string;
@@ -27,6 +27,7 @@ export default function MemberLogin({
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   
   // Registration States
   const [regPhone, setRegPhone] = useState('');
@@ -70,7 +71,7 @@ export default function MemberLogin({
       return;
     }
 
-    const success = await onLogin(phoneNumber, password);
+    const success = await onLogin(phoneNumber, password, rememberMe);
     if (!success) {
       // Detailed error will be handled by parent/errorMsg
     }
@@ -199,6 +200,19 @@ export default function MemberLogin({
                   {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
                 </button>
               </div>
+            </div>
+
+            <div className="flex items-center justify-between text-xs py-1" id="login_options_wrapper">
+              <label className="flex items-center gap-2 text-slate-600 font-medium cursor-pointer select-none" id="remember_me_label">
+                <input
+                  id="remember_me_checkbox"
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-slate-300 accent-teal-600"
+                />
+                로그인 상태 유지 (자동 로그인)
+              </label>
             </div>
 
             <button
