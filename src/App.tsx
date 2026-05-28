@@ -26,9 +26,14 @@ const DEFAULT_SPREADSHEET_ID = '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
 
 // =========================================================================
 // 🔄 [모바일 환경 쿠키/로컬스토리지 이중백업 영속성 유틸리티]
-// - 인앱 웹뷰(카카오톡/네이버 등)나 일부 모바일 기기에서 로컬스토리지 초기화를 우회함
+// - 인앱 웹뷰(카카오톡/네이버 등) 및 샌드박스 아이프레임(Vite Preview) 환경 완벽 지원
 // =========================================================================
+const memoryStorage = new Map<string, string>();
+
 const setPersistentItem = (key: string, value: string) => {
+  try {
+    memoryStorage.set(key, value);
+  } catch (e) {}
   try {
     localStorage.setItem(key, value);
   } catch (e) {
@@ -46,34 +51,45 @@ const setPersistentItem = (key: string, value: string) => {
 const getPersistentItem = (key: string): string | null => {
   let val: string | null = null;
   try {
+    val = memoryStorage.get(key) || null;
+  } catch (e) {}
+  if (val) return val;
+
+  try {
     val = localStorage.getItem(key);
+    if (val) {
+      memoryStorage.set(key, val);
+      return val;
+    }
   } catch (e) {
     console.warn('LocalStorage getItem error:', e);
   }
-  if (!val) {
-    try {
-      const nameEQ = key + "=";
-      const ca = document.cookie.split(';');
-      for (let i = 0; i < ca.length; i++) {
-        let c = ca[i];
-        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
-        if (c.indexOf(nameEQ) === 0) {
-          val = decodeURIComponent(c.substring(nameEQ.length, c.length));
-          // Restore to localStorage to auto-heal
-          try {
-            localStorage.setItem(key, val);
-          } catch (_) {}
-          break;
-        }
+  try {
+    const nameEQ = key + "=";
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+      let c = ca[i];
+      while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+      if (c.indexOf(nameEQ) === 0) {
+        val = decodeURIComponent(c.substring(nameEQ.length, c.length));
+        memoryStorage.set(key, val);
+        // Restore to localStorage to auto-heal
+        try {
+          localStorage.setItem(key, val);
+        } catch (_) {}
+        return val;
       }
-    } catch (e) {
-      console.warn('Cookie get error:', e);
     }
+  } catch (e) {
+    console.warn('Cookie get error:', e);
   }
-  return val;
+  return null;
 };
 
 const removePersistentItem = (key: string) => {
+  try {
+    memoryStorage.delete(key);
+  } catch (e) {}
   try {
     localStorage.removeItem(key);
   } catch (e) {}
@@ -139,13 +155,13 @@ export default function App() {
         console.warn('Initial Firestore spreadsheet_config fetch skipped/failed (falling back to cache/local):', err);
       }
 
-      // 2. Allow URL query parameter to force-override active sheet, fallback to localStorage, fallback to Firestore global setting
+      // 2. Allow URL query parameter to force-override active sheet, fallback to persistent storage fallback, fallback to Firestore global setting
       const params = new URLSearchParams(window.location.search);
       const urlSheetId = params.get('sheetId');
       
-      const savedSheetId = urlSheetId || localStorage.getItem('g_sheets_connected_id') || activeSheetId;
-      const savedSheetUrl = (savedSheetId === activeSheetId) ? activeSheetUrl : (localStorage.getItem('g_sheets_connected_url') || `https://docs.google.com/spreadsheets/d/${savedSheetId}/edit`);
-      const savedSheetTitle = (savedSheetId === activeSheetId) ? activeSheetTitle : (localStorage.getItem('g_sheets_connected_title') || '연동된 회원 데이터베이스');
+      const savedSheetId = urlSheetId || getPersistentItem('g_sheets_connected_id') || activeSheetId;
+      const savedSheetUrl = (savedSheetId === activeSheetId) ? activeSheetUrl : (getPersistentItem('g_sheets_connected_url') || `https://docs.google.com/spreadsheets/d/${savedSheetId}/edit`);
+      const savedSheetTitle = (savedSheetId === activeSheetId) ? activeSheetTitle : (getPersistentItem('g_sheets_connected_title') || '연동된 회원 데이터베이스');
 
       if (!isSubscribed) return;
 
@@ -159,15 +175,15 @@ export default function App() {
 
         // Keep local cache in sync
         if (urlSheetId) {
-          localStorage.setItem('g_sheets_connected_id', urlSheetId);
-          localStorage.setItem('g_sheets_connected_url', savedSheetUrl);
-          localStorage.setItem('g_sheets_connected_title', savedSheetTitle);
+          setPersistentItem('g_sheets_connected_id', urlSheetId);
+          setPersistentItem('g_sheets_connected_url', savedSheetUrl);
+          setPersistentItem('g_sheets_connected_title', savedSheetTitle);
         }
       }
 
       // Load cached local user records as immediate fast fallback
       let resolvedUsers: UserRow[] = [];
-      const cachedUsers = localStorage.getItem('g_sheets_cached_users');
+      const cachedUsers = getPersistentItem('g_sheets_cached_users');
       if (cachedUsers && isSubscribed) {
         try {
           resolvedUsers = JSON.parse(cachedUsers);
@@ -177,7 +193,20 @@ export default function App() {
         }
       }
 
-      // Auto Login check on initial load
+      // Auto Login check on initial load (Priority 1: Fast instant restore of full user profile from persistent storage)
+      const savedMemberData = getPersistentItem('logged_in_member_data');
+      if (savedMemberData && isSubscribed) {
+        try {
+          const parsed = JSON.parse(savedMemberData);
+          if (parsed && typeof parsed === 'object' && parsed.phoneNumber) {
+            setLoggedInMember(parsed);
+            console.log('Instant auto-login session restored from persistent profile:', parsed.name);
+          }
+        } catch (err) {
+          console.warn('Silent restore of cached member failed:', err);
+        }
+      }
+
       const autoLoginEnabled = getPersistentItem('auto_login_enabled') === 'true';
       const savedPhone = getPersistentItem('auto_login_phone');
       const savedPw = getPersistentItem('auto_login_pw');
@@ -190,11 +219,11 @@ export default function App() {
         return digits;
       };
 
-      if (autoLoginEnabled && savedPhone && savedPw && isSubscribed) {
+      // Priority 2: Fallback to phone/password auto-login if no persistent profile is recorded yet but remember-me is checked
+      if (!getPersistentItem('logged_in_member_data') && autoLoginEnabled && savedPhone && savedPw && isSubscribed) {
         const searchPhone = normalizePhone(savedPhone);
         const searchPw = savedPw.trim();
 
-        // Try matching instantly in loaded cache
         const autoMatch = resolvedUsers.find(u => {
           const uPhone = normalizePhone(u.phoneNumber);
           const uPassword = (u.password || '').trim();
@@ -203,7 +232,8 @@ export default function App() {
 
         if (autoMatch) {
           setLoggedInMember(autoMatch);
-          console.log('Auto-login state restored from persistent storage:', autoMatch.name);
+          setPersistentItem('logged_in_member_data', JSON.stringify(autoMatch));
+          console.log('Auto-login session restored from cached user list:', autoMatch.name);
         }
       }
 
@@ -214,9 +244,9 @@ export default function App() {
           if (rows && rows.length > 0 && isSubscribed) {
             setUsers(rows);
             setIsDataLoadedFromSheet(true);
-            localStorage.setItem('g_sheets_cached_users', JSON.stringify(rows));
+            setPersistentItem('g_sheets_cached_users', JSON.stringify(rows));
 
-            // Remote sync verification for auto login active session
+            // Sync/Verify active session live with Google Sheets
             if (autoLoginEnabled && savedPhone && savedPw) {
               const searchPhone = normalizePhone(savedPhone);
               const searchPw = savedPw.trim();
@@ -229,10 +259,12 @@ export default function App() {
 
               if (remoteMatch) {
                 setLoggedInMember(remoteMatch);
+                setPersistentItem('logged_in_member_data', JSON.stringify(remoteMatch)); // Sync newer info!
               } else {
                 // If account has been removed or modified on the Google sheets backend, log out visually,
                 // but do NOT force-erase their saved credential fields to prevent frustrated user lockouts on slow networks.
                 setLoggedInMember(null);
+                removePersistentItem('logged_in_member_data');
                 console.warn('Auto-login session was not validated live against raw sheet, session logged out.');
               }
             }
@@ -292,7 +324,7 @@ export default function App() {
       }
       setUsers(rows);
       setIsDataLoadedFromSheet(true);
-      localStorage.setItem('g_sheets_cached_users', JSON.stringify(rows));
+      setPersistentItem('g_sheets_cached_users', JSON.stringify(rows));
       return true;
     } catch (err: any) {
       console.error(err);
@@ -378,9 +410,9 @@ export default function App() {
       const config: SpreadsheetConfig = { spreadsheetId: id, spreadsheetUrl: url, title };
       setConnectedSheet(config);
       
-      localStorage.setItem('g_sheets_connected_id', id);
-      localStorage.setItem('g_sheets_connected_url', url);
-      localStorage.setItem('g_sheets_connected_title', title);
+      setPersistentItem('g_sheets_connected_id', id);
+      setPersistentItem('g_sheets_connected_url', url);
+      setPersistentItem('g_sheets_connected_title', title);
 
       // Save global configuration in Firestore setting so other computers sync automatically!
       try {
@@ -436,10 +468,10 @@ export default function App() {
       setUsers(rows);
       setIsDataLoadedFromSheet(true);
       
-      localStorage.setItem('g_sheets_connected_id', id);
-      localStorage.setItem('g_sheets_connected_url', url);
-      localStorage.setItem('g_sheets_connected_title', config.title);
-      localStorage.setItem('g_sheets_cached_users', JSON.stringify(rows));
+      setPersistentItem('g_sheets_connected_id', id);
+      setPersistentItem('g_sheets_connected_url', url);
+      setPersistentItem('g_sheets_connected_title', config.title);
+      setPersistentItem('g_sheets_cached_users', JSON.stringify(rows));
 
       // Save global configuration in Firestore setting so other computers sync automatically!
       try {
@@ -481,9 +513,9 @@ export default function App() {
       };
       
       setConnectedSheet(config);
-      localStorage.setItem('g_sheets_connected_id', result.spreadsheetId);
-      localStorage.setItem('g_sheets_connected_url', result.spreadsheetUrl);
-      localStorage.setItem('g_sheets_connected_title', config.title);
+      setPersistentItem('g_sheets_connected_id', result.spreadsheetId);
+      setPersistentItem('g_sheets_connected_url', result.spreadsheetUrl);
+      setPersistentItem('g_sheets_connected_title', config.title);
 
       // Save global configuration in Firestore setting so other computers sync automatically!
       try {
@@ -530,6 +562,7 @@ export default function App() {
     removePersistentItem('auto_login_phone');
     removePersistentItem('auto_login_pw');
     removePersistentItem('auto_login_enabled');
+    removePersistentItem('logged_in_member_data');
     triggerToast('로그아웃되었습니다.');
   };
 
@@ -561,7 +594,7 @@ export default function App() {
         if (rows && rows.length > 0) {
           activeUsers = rows;
           setUsers(rows);
-          localStorage.setItem('g_sheets_cached_users', JSON.stringify(rows));
+          setPersistentItem('g_sheets_cached_users', JSON.stringify(rows));
         }
       } catch (err) {
         console.warn('Real-time sheet check failed on login attempt, falling back to local cache:', err);
@@ -582,10 +615,12 @@ export default function App() {
         setPersistentItem('auto_login_phone', phoneNumber);
         setPersistentItem('auto_login_pw', password);
         setPersistentItem('auto_login_enabled', 'true');
+        setPersistentItem('logged_in_member_data', JSON.stringify(match));
       } else {
         removePersistentItem('auto_login_phone');
         removePersistentItem('auto_login_pw');
         removePersistentItem('auto_login_enabled');
+        removePersistentItem('logged_in_member_data');
       }
       triggerToast(`${match.name}님 로그인 성공!`);
       return true;
@@ -610,7 +645,7 @@ export default function App() {
     try {
       const updatedList = [...users, newUser];
       setUsers(updatedList);
-      localStorage.setItem('g_sheets_cached_users', JSON.stringify(updatedList));
+      setPersistentItem('g_sheets_cached_users', JSON.stringify(updatedList));
 
       // If connected live to Google spreadsheet, append immediately
       if (googleToken && connectedSheet) {
@@ -640,7 +675,7 @@ export default function App() {
     try {
       const updatedList = users.filter(u => u.phoneNumber !== phoneNumber);
       setUsers(updatedList);
-      localStorage.setItem('g_sheets_cached_users', JSON.stringify(updatedList));
+      setPersistentItem('g_sheets_cached_users', JSON.stringify(updatedList));
 
       if (googleToken && connectedSheet) {
         await overwriteUsers(googleToken, connectedSheet.spreadsheetId, updatedList);
