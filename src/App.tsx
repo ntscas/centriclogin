@@ -678,9 +678,9 @@ export default function App() {
               /* TAB 1: MEMBER LOGIN VIEW WITH EMBEDDED SITE & POPUP PROFILE */
               <div className={`flex-1 flex flex-col justify-start w-full ${loggedInMember ? 'py-0' : 'py-4'}`} id="member_portal_view">
                 {loggedInMember ? (
-                  <div className="w-full flex-1 flex flex-col space-y-0" id="embedded_pro_portal">
+                  <div className="w-full flex-1 flex flex-col space-y-4" id="embedded_pro_portal">
                     {/* Embedded Session Bar / User Management Sub-Header */}
-                    <div className="w-full bg-white border border-slate-100 border-b-0 rounded-t-3xl rounded-b-none p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4" id="session_control_bar">
+                    <div className="w-full bg-white/95 backdrop-blur-md border border-slate-100 rounded-3xl p-4 shadow-md flex flex-col md:flex-row items-center justify-between gap-4 sticky top-2 z-30" id="session_control_bar">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-teal-500/10 text-teal-600 flex items-center justify-center font-bold">
                           {loggedInMember.name[0]}
@@ -718,15 +718,30 @@ export default function App() {
                           조세전문가
                         </button>
 
-                        <a
-                          href="https://centrictax.vercel.app/"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                        <button
+                          type="button"
+                          onClick={() => setIframeSrc('https://centrictax.vercel.app/')}
+                          className={`px-4 py-2 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                            iframeSrc === 'https://centrictax.vercel.app/'
+                              ? 'bg-teal-600 text-white ring-1 ring-teal-600'
+                              : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
                           id="view_centric_ai_btn"
                         >
-                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                           CENTRIC AI
+                        </button>
+
+                        <a
+                          href={iframeSrc}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 cursor-pointer border border-slate-200 shadow-xs"
+                          id="open_new_tab_btn"
+                          title="구글 등 외부 솔루션 연동 보안 제한을 해제하고 원활하게 사용하기 위해 새 창에서 실행합니다."
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          새 창 열기
                         </a>
 
                         <button
@@ -742,7 +757,7 @@ export default function App() {
                     </div>
 
                     {/* Integrated Page Iframe Canvas */}
-                    <div className="flex-1 w-full bg-white border border-slate-100 rounded-b-3xl rounded-t-none overflow-hidden shadow-lg relative min-h-[calc(100vh-220px)] flex flex-col" id="centric_pro_canvas">
+                    <div className="flex-1 w-full bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-lg relative min-h-[calc(100vh-220px)] flex flex-col" id="centric_pro_canvas">
                       <iframe
                         src={iframeSrc}
                         title="Centric Pro Portal"
