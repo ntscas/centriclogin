@@ -106,6 +106,52 @@ export default function MemberProfile({ user, onLogout, spreadsheetName, onClose
           </div>
         </div>
 
+        {/* Buttons */}
+        <div className="pt-2 flex gap-4" id="profile_actions">
+          <button
+            id="profile_logout_btn"
+            onClick={onLogout}
+            className="flex-1 py-3 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2 shadow-sm"
+          >
+            <LogOut className="w-4 h-4 text-slate-400" />
+            안전 로그아웃
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+            <div>
+              <span className="block text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">이메일</span>
+              <span className="text-sm font-semibold text-slate-700 font-sans truncate max-w-[150px]">
+                {user.email || '미등록'}
+              </span>
+            </div>
+          </div>
+
+          {/* Custom Info Row */}
+          <div className="flex items-center gap-3.5 p-4 rounded-xl bg-slate-50 border border-slate-100 md:col-span-2" id="profile_detail_other">
+            <div className="p-2 rounded-lg bg-amber-50 text-amber-600">
+              <FileText className="w-4 h-4" />
+            </div>
+            <div className="flex-1">
+              <span className="block text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">기타 정보</span>
+              <span className="text-sm font-bold text-slate-800 font-sans">{user.otherInfo || '기타 기록 없음'}</span>
+            </div>
+          </div>
+
+          {/* Date row */}
+          <div className="flex items-center gap-3.5 p-4 rounded-xl bg-slate-50 border border-slate-100 md:col-span-2" id="profile_detail_date">
+            <div className="p-2 rounded-lg bg-slate-200/50 text-slate-600">
+              <Calendar className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="block text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">회원 가입일</span>
+              <span className="text-sm font-semibold text-slate-600 font-sans">{user.registeredDate || '기록 없음'}</span>
+            </div>
+          </div>
+        </div>
+
         {/* WebView Integration Guide for App Developers */}
         <div className="pt-1" id="webview-dev-guide">
           <details className="group border border-teal-100 rounded-xl bg-teal-50/20 overflow-hidden transition-all duration-200">
