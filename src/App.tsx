@@ -20,7 +20,6 @@ import AdminConsole from './components/AdminConsole';
 
 // =========================================================================
 // ⚙️ [구글 스프레드시트 아이디 설정]
-// - 구글 로그인 후 연결하여 관리하면 자동으로 브라우저에 연동 스프레드시트가 기록됩니다.
 // =========================================================================
 const DEFAULT_SPREADSHEET_ID = '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
 
