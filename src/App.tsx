@@ -20,8 +20,67 @@ import AdminConsole from './components/AdminConsole';
 
 // =========================================================================
 // ⚙️ [구글 스프레드시트 아이디 설정]
+// - 구글 로그인 후 연결하여 관리하면 자동으로 브라우저에 연동 스프레드시트가 기록됩니다.
 // =========================================================================
 const DEFAULT_SPREADSHEET_ID = '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
+
+// =========================================================================
+// 🔄 [모바일 환경 쿠키/로컬스토리지 이중백업 영속성 유틸리티]
+// - 인앱 웹뷰(카카오톡/네이버 등)나 일부 모바일 기기에서 로컬스토리지 초기화를 우회함
+// =========================================================================
+const setPersistentItem = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn('LocalStorage setItem error:', e);
+  }
+  try {
+    const expires = new Date();
+    expires.setTime(expires.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year
+    document.cookie = `${key}=${encodeURIComponent(value)};expires=${expires.toUTCString()};path=/;SameSite=Lax;Secure`;
+  } catch (e) {
+    console.warn('Cookie set error:', e);
+  }
+};
+
+const getPersistentItem = (key: string): string | null => {
+  let val: string | null = null;
+  try {
+    val = localStorage.getItem(key);
+  } catch (e) {
+    console.warn('LocalStorage getItem error:', e);
+  }
+  if (!val) {
+    try {
+      const nameEQ = key + "=";
+      const ca = document.cookie.split(';');
+      for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) {
+          val = decodeURIComponent(c.substring(nameEQ.length, c.length));
+          // Restore to localStorage to auto-heal
+          try {
+            localStorage.setItem(key, val);
+          } catch (_) {}
+          break;
+        }
+      }
+    } catch (e) {
+      console.warn('Cookie get error:', e);
+    }
+  }
+  return val;
+};
+
+const removePersistentItem = (key: string) => {
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {}
+  try {
+    document.cookie = `${key}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;SameSite=Lax;Secure`;
+  } catch (e) {}
+};
 
 // Preloaded mock database for instant interactive trial
 const INITIAL_MOCK_USERS: UserRow[] = [];
@@ -119,9 +178,9 @@ export default function App() {
       }
 
       // Auto Login check on initial load
-      const autoLoginEnabled = localStorage.getItem('auto_login_enabled') === 'true';
-      const savedPhone = localStorage.getItem('auto_login_phone');
-      const savedPw = localStorage.getItem('auto_login_pw');
+      const autoLoginEnabled = getPersistentItem('auto_login_enabled') === 'true';
+      const savedPhone = getPersistentItem('auto_login_phone');
+      const savedPw = getPersistentItem('auto_login_pw');
 
       const normalizePhone = (phone: string) => {
         let digits = phone.replace(/[^0-9]/g, '');
@@ -144,7 +203,7 @@ export default function App() {
 
         if (autoMatch) {
           setLoggedInMember(autoMatch);
-          console.log('Auto-login state restored from local storage:', autoMatch.name);
+          console.log('Auto-login state restored from persistent storage:', autoMatch.name);
         }
       }
 
@@ -171,12 +230,10 @@ export default function App() {
               if (remoteMatch) {
                 setLoggedInMember(remoteMatch);
               } else {
-                // If account has been removed or modified on the Google sheets backend
+                // If account has been removed or modified on the Google sheets backend, log out visually,
+                // but do NOT force-erase their saved credential fields to prevent frustrated user lockouts on slow networks.
                 setLoggedInMember(null);
-                localStorage.removeItem('auto_login_phone');
-                localStorage.removeItem('auto_login_pw');
-                localStorage.removeItem('auto_login_enabled');
-                console.warn('Auto-login invalidated due to remote modification/deletion on Google Sheets.');
+                console.warn('Auto-login session was not validated live against raw sheet, session logged out.');
               }
             }
           }
