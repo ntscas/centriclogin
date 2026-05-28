@@ -678,73 +678,73 @@ export default function App() {
               /* TAB 1: MEMBER LOGIN VIEW WITH EMBEDDED SITE & POPUP PROFILE */
               <div className={`flex-1 flex flex-col justify-start w-full ${loggedInMember ? 'py-0' : 'py-4'}`} id="member_portal_view">
                 {loggedInMember ? (
-                  <div className="w-full flex-1 flex flex-col space-y-4" id="embedded_pro_portal">
+                  <div className="w-full flex-1 flex flex-col space-y-0" id="embedded_pro_portal">
                     {/* Embedded Session Bar / User Management Sub-Header */}
-                    <div className="w-full bg-white/95 backdrop-blur-md border border-slate-100 rounded-3xl p-4 shadow-md flex flex-col md:flex-row items-center justify-between gap-4 sticky top-2 z-30" id="session_control_bar">
+                    <div className="w-full bg-white/95 backdrop-blur-md border border-slate-100 rounded-t-2xl md:rounded-t-3xl rounded-b-none py-2.5 px-3.5 md:p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-2.5 md:gap-4 sticky top-0 z-30" id="session_control_bar">
                       <div 
                         onClick={() => setIsProfileOpen(true)}
-                        className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-1.5 -m-1.5 rounded-2xl transition-all duration-150 group active:scale-98"
+                        className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-1 -m-1 rounded-2xl transition-all duration-150 group active:scale-98"
                         id="session_profile_click_area"
                         title="내 프로필 정보 보기"
                         role="button"
                       >
-                        <div className="w-9 h-9 rounded-xl bg-teal-500/10 text-teal-600 flex items-center justify-center font-bold group-hover:bg-teal-600 group-hover:text-white transition-all duration-200 shadow-xs">
+                        <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-teal-500/10 text-teal-600 flex items-center justify-center font-bold group-hover:bg-teal-600 group-hover:text-white transition-all duration-200 shadow-xs text-sm md:text-base">
                           {loggedInMember.name[0]}
                         </div>
                         <div>
-                          <div className="text-[10px] text-slate-400 font-sans font-medium flex items-center gap-1.5">
+                          <div className="text-[9px] md:text-[10px] text-slate-400 font-sans font-medium flex items-center gap-1.5">
                             인증 회원 세션 활성화
-                            <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-normal shrink-0 group-hover:bg-teal-50 group-hover:text-teal-600 transition-colors">프로필 보기</span>
+                            <span className="text-[8px] md:text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-normal shrink-0 group-hover:bg-teal-50 group-hover:text-teal-600 transition-colors">프로필 보기</span>
                           </div>
-                          <h4 className="text-sm font-bold text-slate-800 font-sans group-hover:text-teal-700 transition-colors">
-                            {loggedInMember.name} 님 <span className="font-normal text-slate-500">({loggedInMember.phoneNumber})</span>
+                          <h4 className="text-xs md:text-sm font-bold text-slate-800 font-sans group-hover:text-teal-700 transition-colors">
+                            {loggedInMember.name} 님 <span className="font-normal text-slate-500 text-[11px] md:text-xs">({loggedInMember.phoneNumber})</span>
                           </h4>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 md:gap-2 flex-wrap justify-center">
                         <button
                           type="button"
                           onClick={() => setIframeSrc('https://centrictax.vercel.app/centric_pro.html')}
-                          className={`px-4 py-2 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                          className={`px-3 py-1.5 md:px-4 md:py-2 text-[11px] md:text-xs font-semibold rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-sm ${
                             iframeSrc === 'https://centrictax.vercel.app/centric_pro.html'
                               ? 'bg-teal-600 text-white ring-1 ring-teal-600'
                               : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
                           }`}
                           id="view_centric_pro_btn"
                         >
-                          <Building2 className="w-3.5 h-3.5" />
+                          <Building2 className="w-3 md:w-3.5 h-3 md:h-3.5" />
                           조세전문가
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setIframeSrc('https://centrictax.vercel.app/')}
-                          className={`px-4 py-2 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                          className={`px-3 py-1.5 md:px-4 md:py-2 text-[11px] md:text-xs font-semibold rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-sm ${
                             iframeSrc === 'https://centrictax.vercel.app/'
                               ? 'bg-teal-600 text-white ring-1 ring-teal-600'
                               : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
                           }`}
                           id="view_centric_ai_btn"
                         >
-                          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                          <Sparkles className="w-3 md:w-3.5 h-3 md:h-3.5 text-amber-500" />
                           CENTRIC AI
                         </button>
 
                         <button
                           type="button"
                           onClick={handleLogout}
-                          className="p-2.5 bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100 rounded-xl transition flex items-center justify-center cursor-pointer shadow-xs"
+                          className="p-2 md:p-2.5 bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100 rounded-xl transition flex items-center justify-center cursor-pointer shadow-xs"
                           id="session_logout_btn"
                           title="로그아웃"
                         >
-                          <LogOut className="w-4 h-4" />
+                          <LogOut className="w-3.5 md:w-4 h-3.5 md:h-4" />
                         </button>
                       </div>
                     </div>
 
                     {/* Integrated Page Iframe Canvas */}
-                    <div className="flex-1 w-full bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-lg relative min-h-[calc(100vh-220px)] flex flex-col" id="centric_pro_canvas">
+                    <div className="flex-1 w-full bg-white border border-t-0 border-slate-100 rounded-b-2xl md:rounded-b-3xl rounded-t-none overflow-hidden shadow-lg relative min-h-[calc(100vh-220px)] flex flex-col" id="centric_pro_canvas">
                       <iframe
                         src={iframeSrc}
                         title="Centric Pro Portal"
