@@ -681,29 +681,28 @@ export default function App() {
                   <div className="w-full flex-1 flex flex-col space-y-4" id="embedded_pro_portal">
                     {/* Embedded Session Bar / User Management Sub-Header */}
                     <div className="w-full bg-white/95 backdrop-blur-md border border-slate-100 rounded-3xl p-4 shadow-md flex flex-col md:flex-row items-center justify-between gap-4 sticky top-2 z-30" id="session_control_bar">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-teal-500/10 text-teal-600 flex items-center justify-center font-bold">
+                      <div 
+                        onClick={() => setIsProfileOpen(true)}
+                        className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-1.5 -m-1.5 rounded-2xl transition-all duration-150 group active:scale-98"
+                        id="session_profile_click_area"
+                        title="내 프로필 정보 보기"
+                        role="button"
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-teal-500/10 text-teal-600 flex items-center justify-center font-bold group-hover:bg-teal-600 group-hover:text-white transition-all duration-200 shadow-xs">
                           {loggedInMember.name[0]}
                         </div>
                         <div>
-                          <div className="text-xs text-slate-400 font-sans font-medium">인증 회원 세션 활성화</div>
-                          <h4 className="text-sm font-bold text-slate-800 font-sans">
+                          <div className="text-[10px] text-slate-400 font-sans font-medium flex items-center gap-1.5">
+                            인증 회원 세션 활성화
+                            <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-normal shrink-0 group-hover:bg-teal-50 group-hover:text-teal-600 transition-colors">프로필 보기</span>
+                          </div>
+                          <h4 className="text-sm font-bold text-slate-800 font-sans group-hover:text-teal-700 transition-colors">
                             {loggedInMember.name} 님 <span className="font-normal text-slate-500">({loggedInMember.phoneNumber})</span>
                           </h4>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2 flex-wrap">
-                        <button
-                          type="button"
-                          onClick={() => setIsProfileOpen(true)}
-                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-                          id="open_profile_dialog_btn"
-                        >
-                          <Users className="w-3.5 h-3.5 text-teal-400" />
-                          내 프로필 정보 ({loggedInMember.name})
-                        </button>
-                        
                         <button
                           type="button"
                           onClick={() => setIframeSrc('https://centrictax.vercel.app/centric_pro.html')}
@@ -732,26 +731,14 @@ export default function App() {
                           CENTRIC AI
                         </button>
 
-                        <a
-                          href={iframeSrc}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 cursor-pointer border border-slate-200 shadow-xs"
-                          id="open_new_tab_btn"
-                          title="구글 등 외부 솔루션 연동 보안 제한을 해제하고 원활하게 사용하기 위해 새 창에서 실행합니다."
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          새 창 열기
-                        </a>
-
                         <button
                           type="button"
                           onClick={handleLogout}
-                          className="px-4 py-2 bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                          className="p-2.5 bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100 rounded-xl transition flex items-center justify-center cursor-pointer shadow-xs"
                           id="session_logout_btn"
+                          title="로그아웃"
                         >
-                          <LogOut className="w-3.5 h-3.5" />
-                          로그아웃
+                          <LogOut className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
