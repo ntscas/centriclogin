@@ -6,6 +6,37 @@ import {
 } from 'lucide-react';
 import { UserRow } from '../types';
 
+// Cookie/LocalStorage persistent getter helper for mobile WebView compatibility
+const getPersistentItem = (key: string): string | null => {
+  let val: string | null = null;
+  try {
+    val = localStorage.getItem(key);
+  } catch (e) {
+    console.warn('LocalStorage getItem error:', e);
+  }
+  if (!val && typeof document !== 'undefined') {
+    try {
+      const nameEQ = key + "=";
+      const ca = document.cookie.split(';');
+      for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) {
+          val = decodeURIComponent(c.substring(nameEQ.length, c.length));
+          // Auto-heal localStorage
+          try {
+            localStorage.setItem(key, val);
+          } catch (_) {}
+          break;
+        }
+      }
+    } catch (e) {
+      console.warn('Cookie get error:', e);
+    }
+  }
+  return val;
+};
+
 interface MemberLoginProps {
   onLogin: (phoneNumber: string, password: string, rememberMe: boolean) => Promise<boolean>;
   onRegister: (user: UserRow) => Promise<boolean>;
@@ -25,14 +56,14 @@ export default function MemberLogin({
 }: MemberLoginProps) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState(() => {
-    return localStorage.getItem('auto_login_phone') || '';
+    return getPersistentItem('auto_login_phone') || '';
   });
   const [password, setPassword] = useState(() => {
-    return localStorage.getItem('auto_login_pw') || '';
+    return getPersistentItem('auto_login_pw') || '';
   });
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(() => {
-    const saved = localStorage.getItem('auto_login_enabled');
+    const saved = getPersistentItem('auto_login_enabled');
     return saved === null ? true : saved === 'true';
   });
   
