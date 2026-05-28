@@ -108,12 +108,44 @@ export default function App() {
       }
 
       // Load cached local user records as immediate fast fallback
+      let resolvedUsers: UserRow[] = [];
       const cachedUsers = localStorage.getItem('g_sheets_cached_users');
       if (cachedUsers && isSubscribed) {
         try {
-          setUsers(JSON.parse(cachedUsers));
+          resolvedUsers = JSON.parse(cachedUsers);
+          setUsers(resolvedUsers);
         } catch (err) {
           console.error('Error parsing cached users:', err);
+        }
+      }
+
+      // Auto Login check on initial load
+      const autoLoginEnabled = localStorage.getItem('auto_login_enabled') === 'true';
+      const savedPhone = localStorage.getItem('auto_login_phone');
+      const savedPw = localStorage.getItem('auto_login_pw');
+
+      const normalizePhone = (phone: string) => {
+        let digits = phone.replace(/[^0-9]/g, '');
+        if (digits.startsWith('8210') && digits.length >= 11) {
+          digits = '0' + digits.slice(2);
+        }
+        return digits;
+      };
+
+      if (autoLoginEnabled && savedPhone && savedPw && isSubscribed) {
+        const searchPhone = normalizePhone(savedPhone);
+        const searchPw = savedPw.trim();
+
+        // Try matching instantly in loaded cache
+        const autoMatch = resolvedUsers.find(u => {
+          const uPhone = normalizePhone(u.phoneNumber);
+          const uPassword = (u.password || '').trim();
+          return uPhone === searchPhone && uPassword === searchPw;
+        });
+
+        if (autoMatch) {
+          setLoggedInMember(autoMatch);
+          console.log('Auto-login state restored from local storage:', autoMatch.name);
         }
       }
 
@@ -125,6 +157,29 @@ export default function App() {
             setUsers(rows);
             setIsDataLoadedFromSheet(true);
             localStorage.setItem('g_sheets_cached_users', JSON.stringify(rows));
+
+            // Remote sync verification for auto login active session
+            if (autoLoginEnabled && savedPhone && savedPw) {
+              const searchPhone = normalizePhone(savedPhone);
+              const searchPw = savedPw.trim();
+
+              const remoteMatch = rows.find(u => {
+                const uPhone = normalizePhone(u.phoneNumber);
+                const uPassword = (u.password || '').trim();
+                return uPhone === searchPhone && uPassword === searchPw;
+              });
+
+              if (remoteMatch) {
+                setLoggedInMember(remoteMatch);
+              } else {
+                // If account has been removed or modified on the Google sheets backend
+                setLoggedInMember(null);
+                localStorage.removeItem('auto_login_phone');
+                localStorage.removeItem('auto_login_pw');
+                localStorage.removeItem('auto_login_enabled');
+                console.warn('Auto-login invalidated due to remote modification/deletion on Google Sheets.');
+              }
+            }
           }
         } catch (err) {
           console.warn('Silent public sheets sync skipped (using cached/default data instead):', err);
@@ -412,8 +467,18 @@ export default function App() {
     }
   };
 
-  // F. User Action: Login Verification
-  const handleUserLogin = async (phoneNumber: string, password: string): Promise<boolean> => {
+  // F. User Action: Clean session & Logout helper
+  const handleLogout = () => {
+    setLoggedInMember(null);
+    setIframeSrc('https://centrictax.vercel.app/centric_pro.html');
+    localStorage.removeItem('auto_login_phone');
+    localStorage.removeItem('auto_login_pw');
+    localStorage.removeItem('auto_login_enabled');
+    triggerToast('로그아웃되었습니다.');
+  };
+
+  // F2. User Action: Login Verification
+  const handleUserLogin = async (phoneNumber: string, password: string, rememberMe = false): Promise<boolean> => {
     setIsLoading(true);
     setErrorMsg('');
 
@@ -457,6 +522,15 @@ export default function App() {
     setIsLoading(false);
     if (match) {
       setLoggedInMember(match);
+      if (rememberMe) {
+        localStorage.setItem('auto_login_phone', phoneNumber);
+        localStorage.setItem('auto_login_pw', password);
+        localStorage.setItem('auto_login_enabled', 'true');
+      } else {
+        localStorage.removeItem('auto_login_phone');
+        localStorage.removeItem('auto_login_pw');
+        localStorage.removeItem('auto_login_enabled');
+      }
       triggerToast(`${match.name}님 로그인 성공!`);
       return true;
     } else {
@@ -657,10 +731,7 @@ export default function App() {
 
                         <button
                           type="button"
-                          onClick={() => {
-                            setLoggedInMember(null);
-                            setIframeSrc('https://centrictax.vercel.app/centric_pro.html');
-                          }}
+                          onClick={handleLogout}
                           className="px-4 py-2 bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 cursor-pointer"
                           id="session_logout_btn"
                         >
@@ -718,8 +789,8 @@ export default function App() {
       {/* FOOTER */}
       {!loggedInMember && (
         <footer className="mt-auto pt-12 text-center text-[11px] text-slate-400 font-mono" id="app_bottom_footer">
-          <p>CENTRIC Tax Network</p>
-          <p className="mt-1 opacity-80">N CENTRIC</p>
+          <p>© 2026 Google Sheets Login Portal. Designed with Inter & Space Grotesk slate styling.</p>
+          <p className="mt-1 opacity-80">This project complies with Google Workspace Auth policies & sandboxed previews.</p>
         </footer>
       )}
 
@@ -734,10 +805,8 @@ export default function App() {
                 spreadsheetName={connectedSheet?.title}
                 onClose={() => setIsProfileOpen(false)}
                 onLogout={() => {
-                  setLoggedInMember(null);
-                  setIframeSrc('https://centrictax.vercel.app/centric_pro.html');
+                  handleLogout();
                   setIsProfileOpen(false);
-                  triggerToast('로그아웃되었습니다.');
                 }}
               />
             </div>
