@@ -527,9 +527,9 @@ export default function App() {
   const handleLogout = () => {
     setLoggedInMember(null);
     setIframeSrc('https://centrictax.vercel.app/centric_pro.html');
-    localStorage.removeItem('auto_login_phone');
-    localStorage.removeItem('auto_login_pw');
-    localStorage.removeItem('auto_login_enabled');
+    removePersistentItem('auto_login_phone');
+    removePersistentItem('auto_login_pw');
+    removePersistentItem('auto_login_enabled');
     triggerToast('로그아웃되었습니다.');
   };
 
@@ -579,13 +579,13 @@ export default function App() {
     if (match) {
       setLoggedInMember(match);
       if (rememberMe) {
-        localStorage.setItem('auto_login_phone', phoneNumber);
-        localStorage.setItem('auto_login_pw', password);
-        localStorage.setItem('auto_login_enabled', 'true');
+        setPersistentItem('auto_login_phone', phoneNumber);
+        setPersistentItem('auto_login_pw', password);
+        setPersistentItem('auto_login_enabled', 'true');
       } else {
-        localStorage.removeItem('auto_login_phone');
-        localStorage.removeItem('auto_login_pw');
-        localStorage.removeItem('auto_login_enabled');
+        removePersistentItem('auto_login_phone');
+        removePersistentItem('auto_login_pw');
+        removePersistentItem('auto_login_enabled');
       }
       triggerToast(`${match.name}님 로그인 성공!`);
       return true;
@@ -852,8 +852,8 @@ export default function App() {
       {/* FOOTER */}
       {!loggedInMember && (
         <footer className="mt-auto pt-12 text-center text-[11px] text-slate-400 font-mono" id="app_bottom_footer">
-          <p>CENTRIC Tax AI Hub</p>
-          <p className="mt-1 opacity-80">N CENTRIC Tax</p>
+          <p>© 2026 Google Sheets Login Portal. Designed with Inter & Space Grotesk slate styling.</p>
+          <p className="mt-1 opacity-80">This project complies with Google Workspace Auth policies & sandboxed previews.</p>
         </footer>
       )}
 
