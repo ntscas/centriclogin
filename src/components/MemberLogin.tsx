@@ -24,10 +24,17 @@ export default function MemberLogin({
   totalUsersCount
 }: MemberLoginProps) {
   const [isSignUp, setIsSignUp] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [password, setPassword] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState(() => {
+    return localStorage.getItem('auto_login_phone') || '';
+  });
+  const [password, setPassword] = useState(() => {
+    return localStorage.getItem('auto_login_pw') || '';
+  });
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(() => {
+    const saved = localStorage.getItem('auto_login_enabled');
+    return saved === null ? true : saved === 'true';
+  });
   
   // Registration States
   const [regPhone, setRegPhone] = useState('');
@@ -164,6 +171,8 @@ export default function MemberLogin({
                 </span>
                 <input
                   id="signin_phone"
+                  name="username"
+                  autoComplete="username"
                   required
                   type="text"
                   inputMode="numeric"
@@ -185,6 +194,8 @@ export default function MemberLogin({
                 </span>
                 <input
                   id="signin_password"
+                  name="password"
+                  autoComplete="current-password"
                   required
                   type={showPassword ? 'text' : 'password'}
                   placeholder="••••"
