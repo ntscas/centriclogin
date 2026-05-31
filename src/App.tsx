@@ -27,8 +27,12 @@ const DEFAULT_SPREADSHEET_ID = '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
 // =========================================================================
 // 🔄 [모바일 환경 쿠키/로컬스토리지 이중백업 영속성 유틸리티]
 // - 인앱 웹뷰(카카오톡/네이버 등) 및 샌드박스 아이프레임(Vite Preview) 환경 완벽 지원
+// - 쿠키에는 오직 소량의 세션 인증용 필드(아이디/비밀번호/자동로그인 활성화 여부)만 보관하여 쿠키 용량 수용한계(4KB) 초과를 원천 차단합니다.
 // =========================================================================
 const memoryStorage = new Map<string, string>();
+
+// 쿠키에 기록할 안전 필드 지정 (전체 유저 DB나 세션 프로필 같은 대용량 데이터는 쿠키 대형화 방지를 위해 로컬스토리지에만 저장)
+const SAFE_COOKIE_KEYS = ['auto_login_phone', 'auto_login_pw', 'auto_login_enabled'];
 
 const setPersistentItem = (key: string, value: string) => {
   try {
@@ -39,12 +43,15 @@ const setPersistentItem = (key: string, value: string) => {
   } catch (e) {
     console.warn('LocalStorage setItem error:', e);
   }
-  try {
-    const expires = new Date();
-    expires.setTime(expires.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year
-    document.cookie = `${key}=${encodeURIComponent(value)};expires=${expires.toUTCString()};path=/;SameSite=Lax;Secure`;
-  } catch (e) {
-    console.warn('Cookie set error:', e);
+  // 쿠키에는 허용된 경량 세션 키만 기록하여 400 Bad Request 에러 방지
+  if (SAFE_COOKIE_KEYS.includes(key)) {
+    try {
+      const expires = new Date();
+      expires.setTime(expires.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year
+      document.cookie = `${key}=${encodeURIComponent(value)};expires=${expires.toUTCString()};path=/;SameSite=Lax;Secure`;
+    } catch (e) {
+      console.warn('Cookie set error:', e);
+    }
   }
 };
 
@@ -64,24 +71,27 @@ const getPersistentItem = (key: string): string | null => {
   } catch (e) {
     console.warn('LocalStorage getItem error:', e);
   }
-  try {
-    const nameEQ = key + "=";
-    const ca = document.cookie.split(';');
-    for (let i = 0; i < ca.length; i++) {
-      let c = ca[i];
-      while (c.charAt(0) === ' ') c = c.substring(1, c.length);
-      if (c.indexOf(nameEQ) === 0) {
-        val = decodeURIComponent(c.substring(nameEQ.length, c.length));
-        memoryStorage.set(key, val);
-        // Restore to localStorage to auto-heal
-        try {
-          localStorage.setItem(key, val);
-        } catch (_) {}
-        return val;
+
+  if (SAFE_COOKIE_KEYS.includes(key)) {
+    try {
+      const nameEQ = key + "=";
+      const ca = document.cookie.split(';');
+      for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) {
+          val = decodeURIComponent(c.substring(nameEQ.length, c.length));
+          memoryStorage.set(key, val);
+          // Restore to localStorage to auto-heal
+          try {
+            localStorage.setItem(key, val);
+          } catch (_) {}
+          return val;
+        }
       }
+    } catch (e) {
+      console.warn('Cookie get error:', e);
     }
-  } catch (e) {
-    console.warn('Cookie get error:', e);
   }
   return null;
 };
@@ -97,6 +107,22 @@ const removePersistentItem = (key: string) => {
     document.cookie = `${key}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;SameSite=Lax;Secure`;
   } catch (e) {}
 };
+
+// 실시간으로 브라우저에 존재할 수 있는 이전 버전의 거대 쿠키(g_sheets_cached_users, logged_in_member_data 등)를 일괄 소거하는 복구 루틴
+try {
+  if (typeof document !== 'undefined') {
+    const dCookies = document.cookie.split(';');
+    for (let i = 0; i < dCookies.length; i++) {
+      const parts = dCookies[i].split('=');
+      const name = parts[0].trim();
+      if (name && !SAFE_COOKIE_KEYS.includes(name)) {
+        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;SameSite=Lax;Secure`;
+      }
+    }
+  }
+} catch (e) {
+  console.warn('Silent cookie cleanup failed:', e);
+}
 
 // Preloaded mock database for instant interactive trial
 const INITIAL_MOCK_USERS: UserRow[] = [];
@@ -122,7 +148,7 @@ export default function App() {
   // Logged-in member session state
   const [loggedInMember, setLoggedInMember] = useState<UserRow | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [iframeSrc, setIframeSrc] = useState('https://centrictax.vercel.app/centric_pro.html');
+  const [iframeSrc, setIframeSrc] = useState('https://centrictax.vercel.app/');
   
   // Global actions loading & error feedback
   const [isLoading, setIsLoading] = useState(false);
@@ -193,20 +219,6 @@ export default function App() {
         }
       }
 
-      // Auto Login check on initial load (Priority 1: Fast instant restore of full user profile from persistent storage)
-      const savedMemberData = getPersistentItem('logged_in_member_data');
-      if (savedMemberData && isSubscribed) {
-        try {
-          const parsed = JSON.parse(savedMemberData);
-          if (parsed && typeof parsed === 'object' && parsed.phoneNumber) {
-            setLoggedInMember(parsed);
-            console.log('Instant auto-login session restored from persistent profile:', parsed.name);
-          }
-        } catch (err) {
-          console.warn('Silent restore of cached member failed:', err);
-        }
-      }
-
       const autoLoginEnabled = getPersistentItem('auto_login_enabled') === 'true';
       const savedPhone = getPersistentItem('auto_login_phone');
       const savedPw = getPersistentItem('auto_login_pw');
@@ -219,8 +231,8 @@ export default function App() {
         return digits;
       };
 
-      // Priority 2: Fallback to phone/password auto-login if no persistent profile is recorded yet but remember-me is checked
-      if (!getPersistentItem('logged_in_member_data') && autoLoginEnabled && savedPhone && savedPw && isSubscribed) {
+      // Check auto-login instantly using cached user list from last session
+      if (autoLoginEnabled && savedPhone && savedPw && isSubscribed) {
         const searchPhone = normalizePhone(savedPhone);
         const searchPw = savedPw.trim();
 
@@ -232,7 +244,6 @@ export default function App() {
 
         if (autoMatch) {
           setLoggedInMember(autoMatch);
-          setPersistentItem('logged_in_member_data', JSON.stringify(autoMatch));
           console.log('Auto-login session restored from cached user list:', autoMatch.name);
         }
       }
@@ -259,12 +270,10 @@ export default function App() {
 
               if (remoteMatch) {
                 setLoggedInMember(remoteMatch);
-                setPersistentItem('logged_in_member_data', JSON.stringify(remoteMatch)); // Sync newer info!
               } else {
                 // If account has been removed or modified on the Google sheets backend, log out visually,
                 // but do NOT force-erase their saved credential fields to prevent frustrated user lockouts on slow networks.
                 setLoggedInMember(null);
-                removePersistentItem('logged_in_member_data');
                 console.warn('Auto-login session was not validated live against raw sheet, session logged out.');
               }
             }
@@ -558,7 +567,7 @@ export default function App() {
   // F. User Action: Clean session & Logout helper
   const handleLogout = () => {
     setLoggedInMember(null);
-    setIframeSrc('https://centrictax.vercel.app/centric_pro.html');
+    setIframeSrc('https://centrictax.vercel.app/');
     removePersistentItem('auto_login_phone');
     removePersistentItem('auto_login_pw');
     removePersistentItem('auto_login_enabled');
@@ -799,21 +808,6 @@ export default function App() {
                       <div className="flex items-center gap-1 md:gap-2 shrink-0">
                         <button
                           type="button"
-                          onClick={() => setIframeSrc('https://centrictax.vercel.app/centric_pro.html')}
-                          className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
-                            iframeSrc === 'https://centrictax.vercel.app/centric_pro.html'
-                              ? 'bg-teal-600 text-white ring-1 ring-teal-600'
-                              : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
-                          }`}
-                          id="view_centric_pro_btn"
-                        >
-                          <Building2 className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 shrink-0" />
-                          <span className="hidden xs:inline">조세전문가</span>
-                          <span className="xs:hidden">전문가</span>
-                        </button>
-
-                        <button
-                          type="button"
                           onClick={() => setIframeSrc('https://centrictax.vercel.app/')}
                           className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
                             iframeSrc === 'https://centrictax.vercel.app/'
@@ -825,6 +819,21 @@ export default function App() {
                           <Sparkles className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 text-amber-500 shrink-0" />
                           <span className="hidden xs:inline">CENTRIC AI</span>
                           <span className="xs:hidden">CENTRIC AI</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIframeSrc('https://centrictax.vercel.app/centric_pro.html')}
+                          className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
+                            iframeSrc === 'https://centrictax.vercel.app/centric_pro.html'
+                              ? 'bg-teal-600 text-white ring-1 ring-teal-600'
+                              : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
+                          id="view_centric_pro_btn"
+                        >
+                          <Building2 className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 shrink-0" />
+                          <span className="hidden xs:inline">조세전문가</span>
+                          <span className="xs:hidden">전문가</span>
                         </button>
 
                         <button
