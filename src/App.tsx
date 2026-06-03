@@ -11,12 +11,14 @@ import { initAuth, googleSignIn, logout as googleSignOut, getAccessToken, db } f
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { 
   fetchUserRows, fetchPublicUserRows, createDatabaseSpreadsheet, appendUserRow, 
-  overwriteUsers, extractSpreadsheetId 
+  overwriteUsers, extractSpreadsheetId, ensureBoardSheet
 } from './lib/googleSheets';
 
 import MemberLogin from './components/MemberLogin';
 import MemberProfile from './components/MemberProfile';
 import AdminConsole from './components/AdminConsole';
+import CentricAIHub from './components/CentricAIHub';
+import TaxExpertList from './components/TaxExpertList';
 
 // =========================================================================
 // ⚙️ [구글 스프레드시트 아이디 설정]
@@ -149,6 +151,8 @@ export default function App() {
   const [loggedInMember, setLoggedInMember] = useState<UserRow | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [iframeSrc, setIframeSrc] = useState('https://centrictax.vercel.app/');
+  const [centricAiResetTrigger, setCentricAiResetTrigger] = useState(0);
+  const [expertResetTrigger, setExpertResetTrigger] = useState(0);
   
   // Global actions loading & error feedback
   const [isLoading, setIsLoading] = useState(false);
@@ -437,6 +441,14 @@ export default function App() {
 
       // Now load users
       const syncSuccess = await syncWithSpreadsheet(googleToken, id);
+      
+      // Also automatically initialize the FreeBoard sheet tab
+      try {
+        await ensureBoardSheet(googleToken, id);
+      } catch (boardErr) {
+        console.warn('Failed to ensure FreeBoard sheet when connecting spreadsheet:', boardErr);
+      }
+
       if (syncSuccess) {
         triggerToast(`스프레드시트 '${title}'와 연동되였으며, 다른 컴퓨터에서도 이 설정이 전역 적용됩니다!`);
       }
@@ -540,7 +552,15 @@ export default function App() {
 
       // Force refresh (it will find empty header rows)
       await syncWithSpreadsheet(googleToken, result.spreadsheetId);
-      triggerToast('Google Drive에 사용자 DB 시트가 생성되었습니다!');
+
+      // Also automatically initialize the FreeBoard sheet tab
+      try {
+        await ensureBoardSheet(googleToken, result.spreadsheetId);
+      } catch (boardErr) {
+        console.warn('Failed to ensure FreeBoard sheet when preparing spreadsheet:', boardErr);
+      }
+
+      triggerToast('Google Drive에 사용자 DB 및 자유게시판(FreeBoard) 시트가 생성되었습니다!');
       return true;
     } catch (err: any) {
       console.error(err);
@@ -808,7 +828,11 @@ export default function App() {
                       <div className="flex items-center gap-1 md:gap-2 shrink-0">
                         <button
                           type="button"
-                          onClick={() => setIframeSrc('https://centrictax.vercel.app/')}
+                          onClick={() => {
+                            setIframeSrc('https://centrictax.vercel.app/');
+                            setCentricAiResetTrigger(prev => prev + 1);
+                            window.scrollTo({ top: 0, behavior: 'instant' });
+                          }}
                           className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
                             iframeSrc === 'https://centrictax.vercel.app/'
                               ? 'bg-teal-600 text-white ring-1 ring-teal-600'
@@ -823,7 +847,11 @@ export default function App() {
 
                         <button
                           type="button"
-                          onClick={() => setIframeSrc('https://centrictax.vercel.app/centric_pro.html')}
+                          onClick={() => {
+                            setIframeSrc('https://centrictax.vercel.app/centric_pro.html');
+                            setExpertResetTrigger(prev => prev + 1);
+                            window.scrollTo({ top: 0, behavior: 'instant' });
+                          }}
                           className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
                             iframeSrc === 'https://centrictax.vercel.app/centric_pro.html'
                               ? 'bg-teal-600 text-white ring-1 ring-teal-600'
@@ -833,7 +861,7 @@ export default function App() {
                         >
                           <Building2 className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 shrink-0" />
                           <span className="hidden xs:inline">조세전문가</span>
-                          <span className="xs:hidden">전문가</span>
+                          <span className="xs:hidden">조세전문가</span>
                         </button>
 
                         <button
@@ -848,16 +876,27 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Integrated Page Iframe Canvas */}
-                    <div className="flex-1 w-full bg-white border border-t-0 border-slate-100 rounded-b-2xl md:rounded-b-3xl rounded-t-none overflow-hidden shadow-lg relative min-h-[calc(100vh-220px)] flex flex-col" id="centric_pro_canvas">
-                      <iframe
-                        src={iframeSrc}
-                        title="Centric Pro Portal"
-                        className="w-full flex-1 border-0 min-h-[650px]"
-                        id="embedded_centric_pro_frame"
-                        allow="fullscreen; clipboard-read; clipboard-write;"
-                        sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox allow-top-navigation allow-top-navigation-by-user-activation"
-                      />
+                    {/* Integrated Page Local or Iframe Canvas */}
+                    <div className="flex-1 w-full bg-white border border-t-0 border-slate-100 rounded-b-2xl md:rounded-b-3xl rounded-t-none overflow-visible shadow-lg relative min-h-[calc(100vh-220px)] flex flex-col" id="centric_pro_canvas">
+                      {iframeSrc === 'https://centrictax.vercel.app/' ? (
+                        <CentricAIHub key={`centric_ai_hub_${centricAiResetTrigger}`} />
+                      ) : iframeSrc === 'https://centrictax.vercel.app/centric_pro.html' ? (
+                        <TaxExpertList 
+                          key={`tax_expert_list_${expertResetTrigger}`}
+                          loggedInMember={loggedInMember}
+                          googleToken={googleToken}
+                          connectedSheet={connectedSheet}
+                        />
+                      ) : (
+                        <iframe
+                          src={iframeSrc}
+                          title="Centric Pro Portal"
+                          className="w-full flex-1 border-0 min-h-[650px]"
+                          id="embedded_centric_pro_frame"
+                          allow="fullscreen; clipboard-read; clipboard-write;"
+                          sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox allow-top-navigation allow-top-navigation-by-user-activation"
+                        />
+                      )}
                     </div>
                   </div>
                 ) : (
