@@ -22,9 +22,9 @@ import {
   Clock
 } from 'lucide-react';
 import { UserRow, SpreadsheetConfig } from '../types';
-import { BoardPost, appendBoardPost, fetchBoardPosts, fetchPublicBoardPosts } from '../lib/googleSheets';
+import { BoardPost, appendBoardPost, fetchBoardPosts, fetchPublicBoardPosts, overwriteBoardPosts } from '../lib/googleSheets';
 import { db } from '../lib/firebase';
-import { collection, addDoc, getDocs, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, where, limit } from 'firebase/firestore';
 
 export interface Professional {
   id: number;
@@ -83,6 +83,12 @@ export default function TaxExpertList({
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [boardSearchTerm, setBoardSearchTerm] = useState<string>('');
 
+  // Board Edit Modal/Form
+  const [editingPost, setEditingPost] = useState<BoardPost | null>(null);
+  const [editTitle, setEditTitle] = useState<string>('');
+  const [editContent, setEditContent] = useState<string>('');
+  const [isEditOpen, setIsEditOpen] = useState<boolean>(false);
+
   // Firestore backup/hybrid helpers
   const loadPostsFromFirestore = async (): Promise<BoardPost[]> => {
     try {
@@ -118,6 +124,37 @@ export default function TaxExpertList({
     }
   };
 
+  const updatePostInFirestore = async (postId: string, title: string, content: string) => {
+    try {
+      const q = query(collection(db, 'board_posts'), where('id', '==', postId), limit(1));
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        const docId = querySnapshot.docs[0].id;
+        const docRef = doc(db, 'board_posts', docId);
+        await updateDoc(docRef, {
+          title: title,
+          content: content,
+        });
+      }
+    } catch (err) {
+      console.error('Firestore board update error:', err);
+    }
+  };
+
+  const deletePostFromFirestore = async (postId: string) => {
+    try {
+      const q = query(collection(db, 'board_posts'), where('id', '==', postId), limit(1));
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        const docId = querySnapshot.docs[0].id;
+        const docRef = doc(db, 'board_posts', docId);
+        await deleteDoc(docRef);
+      }
+    } catch (err) {
+      console.error('Firestore board delete error:', err);
+    }
+  };
+
   // Google Sheets load function
   const loadBoardPosts = async (forceRefresh: boolean | any = false) => {
     const isForced = forceRefresh === true;
@@ -140,8 +177,8 @@ export default function TaxExpertList({
         const isNumericPassword = /^\d{4,8}$/.test(titleStr);
         if (isNumericPassword) return false;
 
-        // 🚨 3. Must have realistic titles and contents
-        if (!titleStr || !contentStr) return false;
+        // 🚨 3. Must have realistic titles
+        if (!titleStr) return false;
         
         // 🚨 4. Prevent headers fallback
         if (titleStr === '비밀번호' || contentStr === '이름' || idStr === '전화번호') return false;
@@ -210,8 +247,68 @@ export default function TaxExpertList({
         if (p.id) map.set(p.id, p);
       });
 
-      // Sort by registeredDate desc
-      const sorted = Array.from(map.values()).sort((a, b) => b.registeredDate.localeCompare(a.registeredDate) || b.id.localeCompare(a.id));
+      // Sort by registeredDate descending (or fallback to row index sequence and numeric ID weights for newest first)
+      const sorted = Array.from(map.values()).sort((a, b) => {
+        const dateA = a.registeredDate ? String(a.registeredDate).trim() : '';
+        const dateB = b.registeredDate ? String(b.registeredDate).trim() : '';
+
+        // If BOTH have non-empty dates, sort by date descending
+        if (dateA && dateB) {
+          const timeA = Date.parse(dateA.replace(/-/g, '/'));
+          const timeB = Date.parse(dateB.replace(/-/g, '/'));
+          
+          if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
+            return timeB - timeA; // Newer date first
+          }
+          
+          const strCompare = dateB.localeCompare(dateA);
+          if (strCompare !== 0) return strCompare;
+        }
+
+        // If at least one has an empty date, or dates are equal, determine order via ID weights
+        const getPostWeight = (p: BoardPost): number => {
+          const idStr = String(p.id || '');
+          if (/^\d+$/.test(idStr)) {
+            return parseInt(idStr, 10);
+          }
+          
+          // Pattern: lookup 13-digit Unix timestamp blocks e.g. post_1772590000000
+          const matches = idStr.match(/\d{13}/);
+          if (matches) {
+            let weight = parseInt(matches[0], 10);
+            
+            // Extract trailing sheet row index suffix e.g. post_1772590000000_15
+            const parts = idStr.split('_');
+            const lastPart = parts[parts.length - 1];
+            if (lastPart && /^\d+$/.test(lastPart) && lastPart !== matches[0]) {
+              const rowIndex = parseInt(lastPart, 10);
+              // A higher row index signifies a newer entry (added further down in the spreadsheet)
+              weight += rowIndex * 0.1;
+            }
+            return weight;
+          }
+
+          // Fallback parsing of trailing sequences
+          const anyDigits = idStr.match(/\d+/g);
+          if (anyDigits && anyDigits.length > 0) {
+            return parseInt(anyDigits[anyDigits.length - 1], 10);
+          }
+
+          return 0;
+        };
+
+        const weightA = getPostWeight(a);
+        const weightB = getPostWeight(b);
+        if (weightA !== weightB) {
+          return weightB - weightA; // Higher numeric weight (newer) first
+        }
+
+        // Final fallback: alphabetical sorting of registeredDate or ID string
+        if (dateA || dateB) {
+          return dateB.localeCompare(dateA);
+        }
+        return String(b.id).localeCompare(String(a.id));
+      });
       
       // Update state and cache only if fetched posts differ from current cache to avoid unneeded blinking
       const hasChanged = JSON.stringify(sorted) !== JSON.stringify(cachedList);
@@ -286,6 +383,110 @@ export default function TaxExpertList({
       alert(`게시글 등록 실패: ${err.message}`);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleEditPost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPost) return;
+    if (!editTitle.trim()) {
+      alert('제목을 입력해주세요.');
+      return;
+    }
+    if (!editContent.trim()) {
+      alert('내용을 입력해주세요.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      // 1. Update in Firestore
+      await updatePostInFirestore(editingPost.id, editTitle.trim(), editContent.trim());
+
+      // 2. Update in Google Sheet if token is active
+      const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
+      if (googleToken && targetSpreadsheetId) {
+        try {
+          const currentPosts = await fetchBoardPosts(googleToken, targetSpreadsheetId);
+          const updatedList = currentPosts.map(p => {
+            if (p.id === editingPost.id) {
+              return {
+                ...p,
+                title: editTitle.trim(),
+                content: editContent.trim()
+              };
+            }
+            return p;
+          });
+          await overwriteBoardPosts(googleToken, targetSpreadsheetId, updatedList);
+        } catch (sheetErr: any) {
+          console.warn('Google Sheet update error, kept backup storage updated:', sheetErr);
+        }
+      }
+
+      // Update state locally
+      setBoardPosts(prev => {
+        const updated = prev.map(p => {
+          if (p.id === editingPost.id) {
+            return {
+              ...p,
+              title: editTitle.trim(),
+              content: editContent.trim()
+            };
+          }
+          return p;
+        });
+        localStorage.setItem('centric_board_posts', JSON.stringify(updated));
+        return updated;
+      });
+
+      setIsEditOpen(false);
+      setEditingPost(null);
+      setEditTitle('');
+      setEditContent('');
+      alert('게시글이 수정되었습니다!');
+    } catch (err: any) {
+      console.error('Post edit error:', err);
+      alert(`게시글 수정 실패: ${err.message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    const confirmDelete = window.confirm('정말 이 게시글을 삭제하시겠습니까?');
+    if (!confirmDelete) return;
+
+    setBoardLoading(true);
+    try {
+      // 1. Delete from Firestore
+      await deletePostFromFirestore(postId);
+
+      // 2. Delete from Google Sheet if token is active
+      const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
+      if (googleToken && targetSpreadsheetId) {
+        try {
+          const currentPosts = await fetchBoardPosts(googleToken, targetSpreadsheetId);
+          const updatedList = currentPosts.filter(p => p.id !== postId);
+          await overwriteBoardPosts(googleToken, targetSpreadsheetId, updatedList);
+        } catch (sheetErr: any) {
+          console.warn('Google Sheet delete error, kept backup storage updated:', sheetErr);
+        }
+      }
+
+      // Update state locally
+      setBoardPosts(prev => {
+        const updated = prev.filter(p => p.id !== postId);
+        localStorage.setItem('centric_board_posts', JSON.stringify(updated));
+        return updated;
+      });
+
+      alert('게시글이 삭제되었습니다!');
+    } catch (err: any) {
+      console.error('Post delete error:', err);
+      alert(`게시글 삭제 실패: ${err.message}`);
+    } finally {
+      setBoardLoading(false);
     }
   };
 
@@ -614,6 +815,30 @@ export default function TaxExpertList({
                         <span className="text-gray-300">|</span>
                         <span className="font-mono text-slate-500">{post.writerPhone}</span>
                       </div>
+
+                      {loggedInMember && post.writerPhone === loggedInMember.phoneNumber && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingPost(post);
+                              setEditTitle(post.title);
+                              setEditContent(post.content);
+                              setIsEditOpen(true);
+                            }}
+                            className="px-2.5 py-1 text-xs text-blue-600 hover:text-blue-800 font-semibold bg-blue-50 hover:bg-blue-100 rounded transition border border-blue-100 cursor-pointer"
+                          >
+                            수정
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePost(post.id)}
+                            className="px-2.5 py-1 text-xs text-red-600 hover:text-red-850 font-semibold bg-red-50 hover:bg-red-100 rounded transition border border-red-100 cursor-pointer"
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -995,6 +1220,93 @@ export default function TaxExpertList({
                     <>
                       <Send className="w-4 h-4" />
                       <span>게시글 등록</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 게시판 글수정 모달 */}
+      {isEditOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900">게시글 수정</h2>
+              <button 
+                type="button"
+                onClick={() => {
+                  setIsEditOpen(false);
+                  setEditingPost(null);
+                }}
+                className="p-1.5 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditPost} className="p-6 flex flex-col gap-4 text-left">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">작성자 정보</label>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-650 flex items-center justify-between">
+                  <div>
+                    <strong>{editingPost?.writerName || '익명회원'}</strong> <span>({editingPost?.writerPhone || '000-0000-0000'})</span>
+                  </div>
+                  <span className="text-[11px] bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full font-medium">작성자 본인</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">제목</label>
+                <input 
+                  type="text"
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder="제목을 입력하세요..."
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">내용</label>
+                <textarea
+                  required
+                  rows={8}
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  placeholder="수정할 내용을 입력하세요..."
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm outline-hidden resize-none"
+                />
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditOpen(false);
+                    setEditingPost(null);
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-750 hover:bg-gray-50 text-sm font-medium transition cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition cursor-pointer"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>수정 중...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>수정 완료</span>
                     </>
                   )}
                 </button>
