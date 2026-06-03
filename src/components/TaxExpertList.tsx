@@ -23,7 +23,7 @@ import {
   Zap
 } from 'lucide-react';
 import { UserRow, SpreadsheetConfig } from '../types';
-import { BoardPost } from '../lib/googleSheets';
+import { BoardPost, appendBoardPost, fetchBoardPosts, fetchPublicBoardPosts, overwriteBoardPosts } from '../lib/googleSheets';
 import { db } from '../lib/firebase';
 import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, where, limit } from 'firebase/firestore';
 
@@ -93,7 +93,7 @@ export default function TaxExpertList({
   // Firestore helpers
   const loadPostsFromFirestore = async (): Promise<BoardPost[]> => {
     try {
-      const q = query(collection(db, 'board_posts'), orderBy('registeredDate', 'desc'));
+      const q = query(collection(db, 'board_posts'));
       const querySnapshot = await getDocs(q);
       const posts: BoardPost[] = [];
       
@@ -142,6 +142,13 @@ export default function TaxExpertList({
           });
         });
       }
+
+      // Sort in-memory to guarantee descending order by registeredDate
+      posts.sort((a, b) => {
+        const dateA = a.registeredDate || '';
+        const dateB = b.registeredDate || '';
+        return dateB.localeCompare(dateA);
+      });
 
       return posts;
     } catch (err) {
@@ -259,13 +266,84 @@ export default function TaxExpertList({
 
     try {
       const firestoreList = await loadPostsFromFirestore();
-      const sorted = cleanPosts(firestoreList);
+      
+      // Load from Google Sheets as well as backup or primary source
+      let sheetList: BoardPost[] = [];
+      const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
+      
+      if (targetSpreadsheetId) {
+        try {
+          if (googleToken) {
+            sheetList = await fetchBoardPosts(googleToken, targetSpreadsheetId);
+          } else {
+            sheetList = await fetchPublicBoardPosts(targetSpreadsheetId);
+          }
+        } catch (sheetErr: any) {
+          console.warn('Google Sheets board fetch failed, falling back to Firestore/local data:', sheetErr);
+        }
+      }
+
+      const cleanFirestore = cleanPosts(firestoreList);
+      const cleanSheet = cleanPosts(sheetList);
+
+      // Merge both lists to be completely identical and delete duplicates using post.id
+      const map = new Map<string, BoardPost>();
+      
+      // Put Google Sheet posts first
+      cleanSheet.forEach(post => {
+        if (post && post.id) {
+          map.set(post.id, post);
+        }
+      });
+
+      // Overlay Firestore posts (making sure Firestore overrides or acts as secondary)
+      cleanFirestore.forEach(post => {
+        if (post && post.id) {
+          map.set(post.id, post);
+        }
+      });
+
+      const mergedList = Array.from(map.values());
+
+      // Sort merged list in memory by registeredDate descending
+      const sorted = mergedList.sort((a, b) => {
+        const dateA = a.registeredDate || '';
+        const dateB = b.registeredDate || '';
+        return dateB.localeCompare(dateA);
+      });
       
       // Update state and cache only if fetched posts differ from current cache to avoid unneeded blinking
       const hasChanged = JSON.stringify(sorted) !== JSON.stringify(cachedList);
       if (hasChanged || isForced) {
         setBoardPosts(sorted);
         localStorage.setItem('centric_board_posts', JSON.stringify(sorted));
+      }
+
+      // 🔄 Bidirectional Sync to make Firestore and Google Sheet identical
+
+      // 1. Check for posts in Sheet that are missing in Firestore and auto-migrate them
+      const firestoreIds = new Set(cleanFirestore.map(p => p.id));
+      const missingInFirestore = cleanSheet.filter(p => !firestoreIds.has(p.id));
+      if (missingInFirestore.length > 0) {
+        console.log(`Auto-migrating ${missingInFirestore.length} missing sheet posts to Firestore...`);
+        missingInFirestore.forEach(mPost => {
+          savePostToFirestore(mPost).catch(fErr => {
+            console.error('Failed to auto-migrate sheet post to Firestore:', mPost.id, fErr);
+          });
+        });
+      }
+
+      // 2. Check for posts in Firestore that are missing in Google Sheet and backup if googleToken is available
+      if (googleToken && targetSpreadsheetId) {
+        const sheetIds = new Set(cleanSheet.map(p => p.id));
+        const missingInSheet = cleanFirestore.filter(p => !sheetIds.has(p.id));
+        
+        if (missingInSheet.length > 0 || hasChanged) {
+          console.log(`Synchronizing Google Sheet backup with identical Cloud DB posts...`);
+          overwriteBoardPosts(googleToken, targetSpreadsheetId, sorted).catch(syncErr => {
+            console.warn('Background Google Sheet backup-sync failed:', syncErr);
+          });
+        }
       }
     } catch (err: any) {
       console.error(err);
@@ -309,6 +387,14 @@ export default function TaxExpertList({
         console.error('Background Firestore save failed:', err);
       });
 
+      // Save to Google Sheet in background as backup sync if token is active
+      const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
+      if (googleToken && targetSpreadsheetId) {
+        appendBoardPost(googleToken, targetSpreadsheetId, newPost).catch(sheetErr => {
+          console.warn('Background Google Sheet backup append failed:', sheetErr);
+        });
+      }
+
       setPostTitle('');
       setPostContent('');
       setIsWriteOpen(false);
@@ -347,6 +433,28 @@ export default function TaxExpertList({
       updatePostInFirestore(editingPost.id, editTitle.trim(), editContent.trim()).catch(err => {
         console.error('Background Firestore update failed:', err);
       });
+
+      // Update in Google Sheet in background as backup sync if token is active
+      const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
+      if (googleToken && targetSpreadsheetId) {
+        const updateSheetPromise = async () => {
+          const currentPosts = await fetchBoardPosts(googleToken, targetSpreadsheetId);
+          const updatedList = currentPosts.map(p => {
+            if (p.id === editingPost.id) {
+              return {
+                ...p,
+                title: editTitle.trim(),
+                content: editContent.trim()
+              };
+            }
+            return p;
+          });
+          await overwriteBoardPosts(googleToken, targetSpreadsheetId, updatedList);
+        };
+        updateSheetPromise().catch(sheetErr => {
+          console.warn('Background Google Sheet backup update failed:', sheetErr);
+        });
+      }
 
       // Update state locally immediately
       setBoardPosts(prev => {
@@ -387,6 +495,19 @@ export default function TaxExpertList({
       deletePostFromFirestore(postId).catch(err => {
         console.error('Background Firestore delete failed:', err);
       });
+
+      // Delete from Google Sheet in background as backup sync if token is active
+      const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
+      if (googleToken && targetSpreadsheetId) {
+        const deleteSheetPromise = async () => {
+          const currentPosts = await fetchBoardPosts(googleToken, targetSpreadsheetId);
+          const updatedList = currentPosts.filter(p => p.id !== postId);
+          await overwriteBoardPosts(googleToken, targetSpreadsheetId, updatedList);
+        };
+        deleteSheetPromise().catch(sheetErr => {
+          console.warn('Background Google Sheet backup delete failed:', sheetErr);
+        });
+      }
 
       // Update state locally immediately
       setBoardPosts(prev => {
