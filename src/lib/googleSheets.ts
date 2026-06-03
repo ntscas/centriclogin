@@ -592,12 +592,23 @@ function parseRowToBoardPost(row: string[], headers: string[], rowIndex: number)
   const phoneIdx = findIndex(['연락처', '전화번호', 'phone', 'tel', 'contact', 'etc'], 3);
   const dateIdx = findIndex(['등록일', '날짜', 'date', 'registered', 'time', '일자'], 4);
 
-  const id = idIdx >= 0 && row[idIdx] ? String(row[idIdx]).trim() : `post_${Date.now()}_${rowIndex}`;
   const title = titleIdx < row.length ? String(row[titleIdx] || '').trim() : '';
   const content = contentIdx < row.length ? String(row[contentIdx] || '').trim() : '';
   const writerName = nameIdx < row.length ? String(row[nameIdx] || '').trim() : '익명회원';
   const writerPhone = phoneIdx < row.length ? String(row[phoneIdx] || '').trim() : '';
   const registeredDate = dateIdx < row.length ? String(row[dateIdx] || '').trim() : '';
+
+  let id = idIdx >= 0 && row[idIdx] ? String(row[idIdx]).trim() : '';
+  if (!id || id.toLowerCase() === 'id') {
+    // Generate a stable, deterministic ID based on row content to prevent duplicate creation on load
+    const fingerprint = `${title}_${content}_${writerName}_${writerPhone}_${registeredDate}`;
+    let hash = 0;
+    for (let i = 0; i < fingerprint.length; i++) {
+      hash = ((hash << 5) - hash) + fingerprint.charCodeAt(i);
+      hash |= 0;
+    }
+    id = `post_stable_${Math.abs(hash)}_${rowIndex}`;
+  }
 
   return { id, title, content, writerName, writerPhone, registeredDate };
 }
