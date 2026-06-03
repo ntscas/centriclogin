@@ -24,8 +24,8 @@ import {
 } from 'lucide-react';
 import { UserRow, SpreadsheetConfig } from '../types';
 import { BoardPost, appendBoardPost, fetchBoardPosts, fetchPublicBoardPosts, overwriteBoardPosts } from '../lib/googleSheets';
+import { doc, getDocs, setDoc, query, where, collection } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, where, limit, setDoc } from 'firebase/firestore';
 
 export interface Professional {
   id: number;
@@ -61,6 +61,17 @@ export default function TaxExpertList({
   googleToken?: string | null;
   connectedSheet?: SpreadsheetConfig | null;
 }) {
+  const activeGoogleToken = googleToken || (typeof window !== 'undefined' ? localStorage.getItem('g_sheets_admin_oauth_token') : null);
+
+  // Custom dialogs/notifications for iframe-sandbox compatibility
+  const [dialogAlertMessage, setDialogAlertMessage] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    message: string;
+    description?: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+
   const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,115 +101,87 @@ export default function TaxExpertList({
   const [editContent, setEditContent] = useState<string>('');
   const [isEditOpen, setIsEditOpen] = useState<boolean>(false);
 
+  // Custom dialog state to replace native window.alert and window.confirm
+  const [feedbackModal, setFeedbackModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  } | null>(null);
+
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  const showFeedback = (title: string, message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setFeedbackModal({ isOpen: true, title, message, type });
+  };
+
+  const showConfirmation = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmModal({ isOpen: true, title, message, onConfirm });
+  };
+
   // Sync Diagnostics States
-  const [firestoreCount, setFirestoreCount] = useState<number | null>(null);
   const [sheetCount, setSheetCount] = useState<number | null>(null);
   const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'loading'>('loading');
   const [dbErrorMessage, setDbErrorMessage] = useState<string | null>(null);
 
-  // Firestore helpers
-  const loadPostsFromFirestore = async (): Promise<BoardPost[]> => {
-    try {
-      const q = query(collection(db, 'board_posts'));
-      const querySnapshot = await getDocs(q);
-      const posts: BoardPost[] = [];
+  // Touch/Pull to Refresh state for Mobile
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [pullDistance, setPullDistance] = useState<number>(0);
+  const [isPulling, setIsPulling] = useState<boolean>(false);
 
-      querySnapshot.forEach((docSnapshot) => {
-        const data = docSnapshot.data();
-        const registeredDate = data.registeredDate || '';
-
-        posts.push({
-          id: data.id || docSnapshot.id,
-          title: data.title || '',
-          content: data.content || '',
-          writerName: data.writerName || '',
-          writerPhone: data.writerPhone || '',
-          registeredDate: registeredDate,
-        });
-      });
-
-      // Sort in-memory to guarantee descending order by registeredDate
-      posts.sort((a, b) => {
-        const dateA = a.registeredDate || '';
-        const dateB = b.registeredDate || '';
-        return dateB.localeCompare(dateA);
-      });
-
-      return posts;
-    } catch (err) {
-      console.error('Firestore board fetch error:', err);
-      throw err; // Rethrow to show active diagnostics on screen
+  const handleTouchStart = (e: React.TouchEvent) => {
+    // Check if the page is scrolled to the absolute top
+    const container = document.getElementById('tax_expert_view_container');
+    const containerScroll = container ? container.scrollTop : 0;
+    if (window.scrollY === 0 && containerScroll === 0) {
+      setTouchStart(e.touches[0].clientY);
     }
   };
 
-  const savePostToFirestore = async (post: BoardPost) => {
-    try {
-      await setDoc(doc(db, 'board_posts', post.id), {
-        ...post,
-        createdAt: serverTimestamp(),
-      });
-      console.log('Successfully saved to Firestore Cloud DB:', post.id);
-    } catch (err) {
-      console.error('Firestore board save error:', err);
-      throw err; // Rethrow to catch during form submittal and alert user
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStart === null) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStart;
+    
+    if (diff > 0) {
+      setIsPulling(true);
+      // Tension friction to prevent pulling too far
+      const pull = Math.min(diff * 0.4, 80);
+      setPullDistance(pull);
     }
   };
 
-  const updatePostInFirestore = async (postId: string, title: string, content: string) => {
-    try {
-      // Direct update by post.id document
-      const docRef = doc(db, 'board_posts', postId);
-      await updateDoc(docRef, {
-        title: title,
-        content: content,
-      });
-      console.log('Successfully updated post directly in Firestore Cloud DB:', postId);
-    } catch (err) {
-      // Fallback query for old legacy documents that used random auto-IDs
-      try {
-        const q = query(collection(db, 'board_posts'), where('id', '==', postId), limit(1));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          const docId = querySnapshot.docs[0].id;
-          const docRef = doc(db, 'board_posts', docId);
-          await updateDoc(docRef, {
-            title: title,
-            content: content,
-          });
-          console.log('Successfully updated legacy post in Firestore Cloud DB via query:', postId);
-        }
-      } catch (innerErr) {
-        console.error('Firestore board update error:', innerErr);
-      }
+  const handleTouchEnd = () => {
+    setTouchStart(null);
+    setIsPulling(false);
+    if (pullDistance > 55) {
+      console.log('User triggered mobile pull-to-refresh of board posts!');
+      loadBoardPosts(true);
     }
-  };
-
-  const deletePostFromFirestore = async (postId: string) => {
-    try {
-      // Direct delete by post.id document
-      const docRef = doc(db, 'board_posts', postId);
-      await deleteDoc(docRef);
-      console.log('Successfully deleted post directly from Firestore Cloud DB:', postId);
-    } catch (err) {
-      // Fallback query for old legacy documents that used random auto-IDs
-      try {
-        const q = query(collection(db, 'board_posts'), where('id', '==', postId), limit(1));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          const docId = querySnapshot.docs[0].id;
-          const docRef = doc(db, 'board_posts', docId);
-          await deleteDoc(docRef);
-          console.log('Successfully deleted legacy post from Firestore Cloud DB via query:', postId);
-        }
-      } catch (innerErr) {
-        console.error('Firestore board delete error:', innerErr);
-      }
-    }
+    setPullDistance(0);
   };
 
   // Board loading and managing functions
   const loadBoardPosts = async (forceRefresh: boolean | any = false) => {
     const isForced = forceRefresh === true;
+
+    // Load deleted post IDs from Firestore as tombstones so they won't show up again.
+    // By pre-fetching this, we can filter them out even from our local cache instantaneously!
+    let deletedPostIds = new Set<string>();
+    try {
+      const q = query(collection(db, 'board_posts'), where('deleted', '==', true));
+      const deletedSnap = await getDocs(q);
+      deletedSnap.forEach(d => {
+        deletedPostIds.add(d.id);
+      });
+    } catch (fsErr) {
+      console.warn('Silent fallback: failed to query deleted post tombstones from Firestore:', fsErr);
+    }
 
     const normalizeDateForFingerprint = (dateStr: string): string => {
       if (!dateStr) return '';
@@ -222,22 +205,15 @@ export default function TaxExpertList({
         if (!post) return false;
         const idStr = String(post.id || '').trim();
         const titleStr = String(post.title || '').trim();
-        const contentStr = String(post.content || '').trim();
         
-        // 🚨 1. If ID looks like a mobile phone number (digits only, e.g. starting with '010' or '8210')
-        const cleanId = idStr.replace(/[^0-9]/g, '');
-        const isPhoneId = (cleanId.startsWith('010') && cleanId.length >= 10) || (cleanId.startsWith('8210') && cleanId.length >= 11);
-        if (isPhoneId) return false;
-
-        // 🚨 2. If title looks like a 4-8 digit password
-        const isNumericPassword = /^\d{4,8}$/.test(titleStr);
-        if (isNumericPassword) return false;
-
-        // 🚨 3. Must have realistic titles
+        // Prevent header rows from being treated as posts
+        if (titleStr === 'title' || titleStr === '제목' || idStr === 'id') return false;
+        
+        // At least title must exist
         if (!titleStr) return false;
-        
-        // 🚨 4. Prevent headers fallback
-        if (titleStr === '비밀번호' || contentStr === '이름' || idStr === '전화번호') return false;
+
+        // Filter out if marked as deleted in Firestore
+        if (deletedPostIds && deletedPostIds.has(idStr)) return false;
 
         return true;
       });
@@ -259,8 +235,8 @@ export default function TaxExpertList({
       }
     }
 
-    // Only show full loading spinner if we don't have ANY posts yet
-    const showSpinner = boardPosts.length === 0 && cachedList.length === 0;
+    // Only show full loading spinner if we don't have ANY posts yet, or if it is a forced manual refresh
+    const showSpinner = isForced || (boardPosts.length === 0 && cachedList.length === 0);
     if (showSpinner) {
       setBoardLoading(true);
     }
@@ -270,67 +246,44 @@ export default function TaxExpertList({
       setDbStatus('loading');
       setDbErrorMessage(null);
 
-      let firestoreList: BoardPost[] = [];
-      try {
-        firestoreList = await loadPostsFromFirestore();
-        setFirestoreCount(firestoreList.length);
-        setDbStatus('connected');
-      } catch (fsErr: any) {
-        console.error('Firestore fetch failed in loadBoardPosts:', fsErr);
-        setDbStatus('error');
-        setDbErrorMessage(fsErr?.message || String(fsErr));
-        setFirestoreCount(0);
-      }
-      
-      // Load from Google Sheets as well as backup or primary source
+      // Load from Google Sheets ONLY
       let sheetList: BoardPost[] = [];
       const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
       
       if (targetSpreadsheetId) {
         try {
-          if (googleToken) {
-            sheetList = await fetchBoardPosts(googleToken, targetSpreadsheetId);
+          if (activeGoogleToken) {
+            try {
+              sheetList = await fetchBoardPosts(activeGoogleToken, targetSpreadsheetId);
+            } catch (boardAuthErr: any) {
+              console.warn('Authenticated board post fetch failed, trying public load fallback:', boardAuthErr);
+              sheetList = await fetchPublicBoardPosts(targetSpreadsheetId);
+            }
           } else {
             sheetList = await fetchPublicBoardPosts(targetSpreadsheetId);
           }
+          setDbStatus('connected');
           setSheetCount(sheetList.length);
         } catch (sheetErr: any) {
-          console.warn('Google Sheets board fetch failed, falling back to Firestore/local data:', sheetErr);
+          console.error('Google Sheets board fetch failed:', sheetErr);
+          setDbStatus('error');
+          setDbErrorMessage(sheetErr?.message || String(sheetErr));
           setSheetCount(0);
         }
       } else {
+        setDbStatus('error');
+        setDbErrorMessage('연결된 구글 스프레드시트 설정이 없습니다.');
         setSheetCount(0);
       }
 
-      const cleanFirestore = cleanPosts(firestoreList);
-      const cleanSheet = cleanPosts(sheetList);
-
-      // Merge both lists to be completely identical and delete duplicates using post.id
-      const map = new Map<string, BoardPost>();
-      
-      // Put Google Sheet posts first
-      cleanSheet.forEach(post => {
-        if (post && post.id) {
-          map.set(post.id, post);
-        }
-      });
-
-      // Overlay Firestore posts (making sure Firestore overrides or acts as secondary)
-      cleanFirestore.forEach(post => {
-        if (post && post.id) {
-          map.set(post.id, post);
-        }
-      });
-
-      const mergedList = Array.from(map.values());
+      // Filter and clean Sheet posts
+      const cleanAll = cleanPosts(sheetList);
 
       // 🚨 Super-robust, content-based strict deduplication.
-      // This wipes out any pre-existing duplicate posts (cloned and saved during older bugs) 
-      // by ensuring that no two posts with the same title, content, and author are shown or saved.
       const uniqueByContent: BoardPost[] = [];
       const seenFingerprints = new Set<string>();
 
-      mergedList.forEach(post => {
+      cleanAll.forEach(post => {
         const titleStr = (post.title || '').trim();
         const contentStr = (post.content || '').trim();
         const writerStr = (post.writerName || '').trim();
@@ -341,18 +294,10 @@ export default function TaxExpertList({
         if (!seenFingerprints.has(fp)) {
           seenFingerprints.add(fp);
           uniqueByContent.push(post);
-        } else {
-          // If Firestore contains a duplicated post, auto-prune it in background to heal the Firestore collection!
-          if (post.id && !post.id.startsWith('post_stable_')) {
-            console.log('Background auto-pruning duplicate Firestore post doc:', post.id);
-            deletePostFromFirestore(post.id).catch(err => {
-              console.warn(`Failed to background-prune duplicate Firestore post: ${post.id}`, err);
-            });
-          }
         }
       });
 
-      // Sort merged list in memory by registeredDate descending
+      // Sort list in memory by registeredDate descending
       const sorted = uniqueByContent.sort((a, b) => {
         const dateA = a.registeredDate || '';
         const dateB = b.registeredDate || '';
@@ -365,37 +310,10 @@ export default function TaxExpertList({
         setBoardPosts(sorted);
         localStorage.setItem('centric_board_posts', JSON.stringify(sorted));
       }
-
-      // 🔄 Bidirectional Sync to make Firestore and Google Sheet identical
-
-      // 1. Check for posts in Sheet that are missing in Firestore and auto-migrate them
-      const firestoreIds = new Set(cleanFirestore.map(p => p.id));
-      const missingInFirestore = cleanSheet.filter(p => !firestoreIds.has(p.id));
-      if (missingInFirestore.length > 0) {
-        console.log(`Auto-migrating ${missingInFirestore.length} missing sheet posts to Firestore...`);
-        missingInFirestore.forEach(mPost => {
-          savePostToFirestore(mPost).catch(fErr => {
-            console.error('Failed to auto-migrate sheet post to Firestore:', mPost.id, fErr);
-          });
-        });
-      }
-
-      // 2. Check for posts in Firestore that are missing in Google Sheet and backup if googleToken is available
-      if (googleToken && targetSpreadsheetId) {
-        const sheetIds = new Set(cleanSheet.map(p => p.id));
-        const missingInSheet = cleanFirestore.filter(p => !sheetIds.has(p.id));
-        
-        if (missingInSheet.length > 0 || hasChanged) {
-          console.log(`Synchronizing Google Sheet backup with identical Cloud DB posts...`);
-          overwriteBoardPosts(googleToken, targetSpreadsheetId, sorted).catch(syncErr => {
-            console.warn('Background Google Sheet backup-sync failed:', syncErr);
-          });
-        }
-      }
     } catch (err: any) {
-      console.error(err);
+      console.error('Error in loadBoardPosts logic:', err);
       if (showSpinner) {
-        setBoardError(`게시글을 불러올 수 없습니다.`);
+        setBoardError(`게시글을 불러올 수 없습니다. 데이터베이스 상태를 확인해 주세요.`);
       }
     } finally {
       setBoardLoading(false);
@@ -405,11 +323,11 @@ export default function TaxExpertList({
   const handleWritePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!postTitle.trim()) {
-      alert('제목을 입력해주세요.');
+      showFeedback('입력 오류', '제목을 입력해주세요.', 'error');
       return;
     }
     if (!postContent.trim()) {
-      alert('내용을 입력해주세요.');
+      showFeedback('입력 오류', '내용을 입력해주세요.', 'error');
       return;
     }
 
@@ -429,16 +347,21 @@ export default function TaxExpertList({
         registeredDate: registeredDate,
       };
 
-      // Save to Firestore and await to ensure it succeeds before celebrating!
-      await savePostToFirestore(newPost);
-
-      // Save to Google Sheet as backup sync if token is active
+      // Save to Google Sheet immediately if token is active
       const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
-      if (googleToken && targetSpreadsheetId) {
+      let googleSheetSuccess = false;
+      let isTokenExpired = false;
+
+      if (activeGoogleToken && targetSpreadsheetId) {
         try {
-          await appendBoardPost(googleToken, targetSpreadsheetId, newPost);
+          await appendBoardPost(activeGoogleToken, targetSpreadsheetId, newPost);
+          googleSheetSuccess = true;
         } catch (sheetErr: any) {
-          console.warn('Google Sheet append backup failed:', sheetErr);
+          console.error('Failed to append to Google sheet:', sheetErr);
+          const errStr = String(sheetErr?.message || sheetErr).toLowerCase();
+          if (errStr.includes('auth') || errStr.includes('token') || errStr.includes('unauthorized') || errStr.includes('credential')) {
+            isTokenExpired = true;
+          }
         }
       }
 
@@ -453,10 +376,24 @@ export default function TaxExpertList({
         return updated;
       });
       
-      alert('게시글이 실시간 클라우드 DB에 성공적으로 등록되었습니다!');
+      // Generate very transparent, honest response
+      let successMessage = '✏️ 게시글이 성공적으로 등록되었습니다!';
+      if (activeGoogleToken) {
+        if (googleSheetSuccess) {
+          successMessage += '\n\n구글 스프레드시트 기록이 완료되었습니다.';
+        } else {
+          successMessage += isTokenExpired
+            ? '\n\n⚠️ 주의: Google 계정 연동 세션이 만료되었습니다. 다시 연동을 진행해 주시면 구글 스프레드시트에 정상 등록됩니다.'
+            : '\n\n⚠️ 구글 시트 쓰기 중 오류가 발생했습니다. 잠시 후 다시 시도해 주십시오.';
+        }
+      } else {
+        successMessage += '\n\n💡 안내: 게시글은 화면과 로컬에 임시 기록되었으나, 구글 시트 직접 쓰기 권한이 제한되어 있습니다. [설정] 메뉴에서 구글 계정을 연동해 주시면 구글 스프레드시트 본체와 즉시 실시간 연동됩니다.';
+      }
+      
+      showFeedback('등록 완료', successMessage, googleSheetSuccess ? 'success' : 'info');
     } catch (err: any) {
       console.error('Post submit error:', err);
-      alert(`클라우드 DB 게시글 등록 실패: ${err.message || err}\n\n데이터베이스 연결 상태를 확인해주십시오.`);
+      showFeedback('등록 실패', `게시글 등록에 실패했습니다: ${err.message || err}`, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -466,27 +403,37 @@ export default function TaxExpertList({
     e.preventDefault();
     if (!editingPost) return;
     if (!editTitle.trim()) {
-      alert('제목을 입력해주세요.');
+      showFeedback('입력 오류', '제목을 입력해주세요.', 'error');
       return;
     }
     if (!editContent.trim()) {
-      alert('내용을 입력해주세요.');
+      showFeedback('입력 오류', '내용을 입력해주세요.', 'error');
       return;
     }
 
     setSubmitting(true);
     try {
-      // Update in Firestore in background for ultra-speed UI response
-      updatePostInFirestore(editingPost.id, editTitle.trim(), editContent.trim()).catch(err => {
-        console.error('Background Firestore update failed:', err);
-      });
-
-      // Update in Google Sheet in background as backup sync if token is active
       const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
-      if (googleToken && targetSpreadsheetId) {
-        const updateSheetPromise = async () => {
-          const currentPosts = await fetchBoardPosts(googleToken, targetSpreadsheetId);
-          const updatedList = currentPosts.map(p => {
+      
+      // Update state locally immediately
+      const updatedList = boardPosts.map(p => {
+        if (p.id === editingPost.id) {
+          return {
+            ...p,
+            title: editTitle.trim(),
+            content: editContent.trim()
+          };
+        }
+        return p;
+      });
+      setBoardPosts(updatedList);
+      localStorage.setItem('centric_board_posts', JSON.stringify(updatedList));
+
+      let googleSheetSuccess = false;
+      if (activeGoogleToken && targetSpreadsheetId) {
+        try {
+          const currentPosts = await fetchBoardPosts(activeGoogleToken, targetSpreadsheetId);
+          const updatedSheetList = currentPosts.map(p => {
             if (p.id === editingPost.id) {
               return {
                 ...p,
@@ -496,80 +443,90 @@ export default function TaxExpertList({
             }
             return p;
           });
-          await overwriteBoardPosts(googleToken, targetSpreadsheetId, updatedList);
-        };
-        updateSheetPromise().catch(sheetErr => {
-          console.warn('Background Google Sheet backup update failed:', sheetErr);
-        });
+          await overwriteBoardPosts(activeGoogleToken, targetSpreadsheetId, updatedSheetList);
+          googleSheetSuccess = true;
+        } catch (sheetErr) {
+          console.error('Failed to edit on Google sheet:', sheetErr);
+        }
       }
-
-      // Update state locally immediately
-      setBoardPosts(prev => {
-        const updated = prev.map(p => {
-          if (p.id === editingPost.id) {
-            return {
-              ...p,
-              title: editTitle.trim(),
-              content: editContent.trim()
-            };
-          }
-          return p;
-        });
-        localStorage.setItem('centric_board_posts', JSON.stringify(updated));
-        return updated;
-      });
 
       setIsEditOpen(false);
       setEditingPost(null);
       setEditTitle('');
       setEditContent('');
-      alert('게시글이 수정되었습니다!');
+      
+      let successMessage = '게시글이 성공적으로 수정되었습니다.';
+      if (!googleSheetSuccess) {
+        successMessage += '\n\n💡 안내: 화면과 로컬에는 수정사항이 적용되었으나, 구글 스프레드시트 실시간 수정은 권한(토큰) 연동이 필요합니다.';
+      }
+      showFeedback('수정 완료', successMessage, googleSheetSuccess ? 'success' : 'info');
     } catch (err: any) {
       console.error('Post edit error:', err);
-      alert(`게시글 수정 실패: ${err.message}`);
+      showFeedback('수정 실패', `게시글 수정 실패: ${err.message}`, 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDeletePost = async (postId: string) => {
-    const confirmDelete = window.confirm('정말 이 게시글을 삭제하시겠습니까?');
-    if (!confirmDelete) return;
+  const handleDeletePost = (postId: string) => {
+    showConfirmation(
+      '게시글 삭제',
+      '정말 이 게시글을 영구히 삭제하시겠습니까?',
+      async () => {
+        setBoardLoading(true);
+        try {
+          const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
+          
+          // Update local state first for instant feedback.
+          const updatedList = boardPosts.filter(p => p.id !== postId);
+          setBoardPosts(updatedList);
+          localStorage.setItem('centric_board_posts', JSON.stringify(updatedList));
 
-    setBoardLoading(true);
-    try {
-      // Delete from Firestore in background for ultra-speed UI response
-      deletePostFromFirestore(postId).catch(err => {
-        console.error('Background Firestore delete failed:', err);
-      });
+          // Track deletion via Firestore tombstone, so even if we cannot update the Google sheet immediately,
+          // the post is hidden globally for all logged-in devices right away.
+          let firestoreRemoved = false;
+          try {
+            await setDoc(doc(db, 'board_posts', postId), {
+              id: postId,
+              deleted: true,
+              deletedAt: new Date().toISOString()
+            });
+            firestoreRemoved = true;
+          } catch (fsErr) {
+            console.error('Failed to sync deletion to Firestore:', fsErr);
+          }
 
-      // Delete from Google Sheet in background as backup sync if token is active
-      const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
-      if (googleToken && targetSpreadsheetId) {
-        const deleteSheetPromise = async () => {
-          const currentPosts = await fetchBoardPosts(googleToken, targetSpreadsheetId);
-          const updatedList = currentPosts.filter(p => p.id !== postId);
-          await overwriteBoardPosts(googleToken, targetSpreadsheetId, updatedList);
-        };
-        deleteSheetPromise().catch(sheetErr => {
-          console.warn('Background Google Sheet backup delete failed:', sheetErr);
-        });
+          // Attempt direct Google Sheet delete if token is active
+          let sheetRemoved = false;
+          if (activeGoogleToken && targetSpreadsheetId) {
+            try {
+              const currentPosts = await fetchBoardPosts(activeGoogleToken, targetSpreadsheetId);
+              const updatedSheetList = currentPosts.filter(p => p.id !== postId);
+              await overwriteBoardPosts(activeGoogleToken, targetSpreadsheetId, updatedSheetList);
+              sheetRemoved = true;
+            } catch (sheetErr) {
+              console.error('Failed to delete on Google sheet:', sheetErr);
+            }
+          }
+
+          let alertMsg = '🗑️ 게시글이 성공적으로 삭제처리 되었습니다.';
+          if (sheetRemoved) {
+            alertMsg += '\n\n구글 스프레드시트에서도 영구히 삭제 완료되었습니다.';
+          } else if (firestoreRemoved) {
+            alertMsg += '\n\n💡 안내: 구글 스프레드시트 본체 행 삭제를 위해서는 Google 계정 연동 권한([설정] 탭)이 필요합니다만, 데이터베이스상 삭제 처리가 완료되어 다른 기기에서도 이 게시물은 더 이상 표시되지 않습니다.';
+          } else {
+            alertMsg += '\n\n💡 안내: 화면과 로컬 장치에서는 즉시 삭제되었으며, 구글 시트 본체 행 삭제를 위해 Google 로그인 연동 권한이 필요합니다.';
+          }
+          
+          showFeedback('삭제 완료', alertMsg, sheetRemoved ? 'success' : 'info');
+        } catch (err: any) {
+          console.error('Post delete error:', err);
+          showFeedback('삭제 실패', `게시글 삭제 실패: ${err.message}`, 'error');
+        } finally {
+          setBoardLoading(false);
+        }
       }
-
-      // Update state locally immediately
-      setBoardPosts(prev => {
-        const updated = prev.filter(p => p.id !== postId);
-        localStorage.setItem('centric_board_posts', JSON.stringify(updated));
-        return updated;
-      });
-
-      alert('게시글이 삭제되었습니다!');
-    } catch (err: any) {
-      console.error('Post delete error:', err);
-      alert(`게시글 삭제 실패: ${err.message}`);
-    } finally {
-      setBoardLoading(false);
-    }
+    );
   };
 
   const filteredPosts = useMemo(() => {
@@ -640,6 +597,31 @@ export default function TaxExpertList({
       }
     }
   }, [boardSearchTerm]);
+
+  // 🔄 다른 탭 이동 후 다시 돌아오면 자동 새로고침 및 실시간 갱신 효과
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isBoardOpen) {
+        console.log('브라우저 탭 활성화 감지: 자유게시판 목록을 동기화합니다.');
+        loadBoardPosts(true);
+      }
+    };
+
+    const handleWindowFocus = () => {
+      if (isBoardOpen) {
+        console.log('브라우저 포커스 감지: 자유게시판 목록을 동기화합니다.');
+        loadBoardPosts(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
+    };
+  }, [isBoardOpen]);
 
   const fetchProfessionals = async () => {
     try {
@@ -738,8 +720,16 @@ export default function TaxExpertList({
     setIsSearchMode(false);
   };
 
+  const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
+
   return (
-    <div className="w-full bg-gray-50 min-h-screen text-gray-800 flex flex-col font-sans" id="tax_expert_view_container">
+    <div 
+      className="w-full bg-gray-50 min-h-screen text-gray-800 flex flex-col font-sans" 
+      id="tax_expert_view_container"
+      onTouchStart={isBoardOpen ? handleTouchStart : undefined}
+      onTouchMove={isBoardOpen ? handleTouchMove : undefined}
+      onTouchEnd={isBoardOpen ? handleTouchEnd : undefined}
+    >
       {/* 헤더 */}
       <header className="bg-white shadow-xs border-b" id="expert_header">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2 md:py-3 flex flex-row items-center justify-between gap-2 md:gap-4">
@@ -809,10 +799,10 @@ export default function TaxExpertList({
               </div>
               
               <div className="flex flex-wrap items-center gap-3">
-                {/* 실시간 클라우드 상태 표시기 */}
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700/90 border border-blue-100 rounded-lg text-xs font-semibold select-none">
-                  <Zap className="w-3.5 h-3.5 text-blue-500 fill-blue-500 animate-pulse" />
-                  <span>실시간 클라우드 DB (30일 유효)</span>
+                {/* 연결된 구글 시트 ID 표시 */}
+                <div className="px-3 py-1.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-mono select-all flex items-center gap-1.5" title="현재 연동중인 구글 스프레드시트 ID">
+                  <span className="font-sans text-gray-500 font-medium text-[11px]">연동 시트 ID:</span>
+                  <span className="font-mono text-slate-800 font-bold max-w-[200px] truncate">{targetSpreadsheetId}</span>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -842,46 +832,16 @@ export default function TaxExpertList({
           {/* 게시판 컨텐츠 영역 */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-8 w-full flex-1 flex flex-col justify-start">
 
-            {/* 실시간 백엔드 및 구글 시트 동기화 디바이스 현황 */}
-            <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs text-gray-600 shadow-xs" id="sync_diagnostics_bar">
-              <div className="flex flex-wrap items-center gap-3 md:gap-5">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-700">데이터 실시간 연동 현황:</span>
-                </div>
-                
-                {/* 1. Firestore Cloud DB Status */}
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-2 h-2 rounded-full ${
-                    dbStatus === 'connected' ? 'bg-green-500 animate-pulse' : 
-                    dbStatus === 'loading' ? 'bg-amber-400' : 'bg-red-500'
-                  }`} />
-                  <span className="font-medium text-gray-700">구글 클라우드 DB (Firestore):</span>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase transition ${
-                    dbStatus === 'connected' ? 'bg-green-100 text-green-800' :
-                    dbStatus === 'loading' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
-                  }`}>
-                    {dbStatus === 'connected' ? `연결됨 (조회: ${firestoreCount ?? 0}건)` : 
-                     dbStatus === 'loading' ? '연결중...' : '연결 오류'}
-                  </span>
-                </div>
-
-                {/* 2. Google Sheets Backup Status */}
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span className="font-medium text-gray-700">구글 스프레드시트 (백업):</span>
-                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                    연결됨 ({sheetCount !== null ? `${sheetCount}건` : '로딩중...'})
-                  </span>
-                </div>
+            {/* Pull to refresh visual indicator */}
+            {pullDistance > 0 && (
+              <div 
+                style={{ height: `${pullDistance}px` }}
+                className="mb-3 w-full overflow-hidden flex items-center justify-center bg-blue-50/75 border border-blue-200/55 rounded-xl transition-all duration-75 text-xs text-blue-600 font-semibold gap-2 shadow-xs"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-blue-500 ${pullDistance > 55 ? 'animate-spin' : ''}`} />
+                <span>{pullDistance > 55 ? '손을 놓으면 당겨서 새로고침 완료!' : '아래로 당겨서 게시판 새로고침...'}</span>
               </div>
-
-              {dbErrorMessage && (
-                <div className="md:max-w-xs text-[10px] text-red-600 bg-red-50 border border-red-100 p-1.5 rounded flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />
-                  <span className="truncate">오류 상세: {dbErrorMessage}</span>
-                </div>
-              )}
-            </div>
+            )}
 
             {boardLoading ? (
               <div className="text-center py-16 flex-1 flex flex-col items-center justify-center gap-3">
@@ -1442,6 +1402,73 @@ export default function TaxExpertList({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* CUSTOM DIALOGS & OVERLAYS (RESOLVES IFRAME BLOCKED POPUPS & FOCUS RACES) */}
+      {/* ========================================================================= */}
+      {feedbackModal && feedbackModal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in duration-150" id="feedback_modal_overlay">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-150 scale-in duration-150 flex flex-col items-center text-center">
+            {feedbackModal.type === 'success' ? (
+              <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-4">
+                <CheckCircle className="w-6 h-6 text-emerald-500" />
+              </div>
+            ) : feedbackModal.type === 'error' ? (
+              <div className="w-12 h-12 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center mb-4">
+                <AlertTriangle className="w-6 h-6 text-rose-500" />
+              </div>
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center mb-4">
+                <Clock className="w-6 h-6 text-blue-500" />
+              </div>
+            )}
+            <h3 className="text-base font-bold text-gray-900 mb-1.5">{feedbackModal.title}</h3>
+            <p className="text-xs text-gray-600 mb-5 whitespace-pre-wrap leading-relaxed">{feedbackModal.message}</p>
+            <button
+              type="button"
+              onClick={() => setFeedbackModal(null)}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold rounded-xl text-xs shadow-md shadow-blue-500/10 transition cursor-pointer"
+              id="feedback_modal_confirm_btn"
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      )}
+
+      {confirmModal && confirmModal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in duration-150" id="confirm_modal_overlay">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-150 scale-in duration-150 text-center flex flex-col items-center">
+            <div className="w-12 h-12 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 h-6 text-amber-500" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900 mb-1.5">{confirmModal.title}</h3>
+            <p className="text-xs text-gray-600 mb-5 whitespace-pre-wrap leading-relaxed">{confirmModal.message}</p>
+            <div className="flex gap-2.5 w-full">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(null)}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-750 font-semibold rounded-xl text-xs transition cursor-pointer"
+                id="confirm_modal_cancel_btn"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const onC = confirmModal.onConfirm;
+                  setConfirmModal(null);
+                  onC();
+                }}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold rounded-xl text-xs shadow-md shadow-red-500/10 transition cursor-pointer"
+                id="confirm_modal_proceed_btn"
+              >
+                삭제
+              </button>
+            </div>
           </div>
         </div>
       )}
