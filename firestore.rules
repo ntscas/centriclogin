@@ -1,7 +1,17 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // Global safety net (must be the first block to secure other collections)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     match /settings/spreadsheet_config {
+      allow read, write: if true;
+    }
+
+    match /board_posts/{postId} {
       allow read, write: if true;
     }
   }
