@@ -185,11 +185,11 @@ export default function App() {
         console.warn('Initial Firestore spreadsheet_config fetch skipped/failed (falling back to cache/local):', err);
       }
 
-      // 2. Allow URL query parameter to force-override active sheet, fallback to persistent storage fallback, fallback to Firestore global setting
+      // 2. Allow URL query parameter to force-override active sheet, fallback to Firestore global setting, fallback to persistent storage fallback
       const params = new URLSearchParams(window.location.search);
       const urlSheetId = params.get('sheetId');
       
-      const savedSheetId = urlSheetId || getPersistentItem('g_sheets_connected_id') || activeSheetId;
+      const savedSheetId = urlSheetId || activeSheetId || getPersistentItem('g_sheets_connected_id');
       const savedSheetUrl = (savedSheetId === activeSheetId) ? activeSheetUrl : (getPersistentItem('g_sheets_connected_url') || `https://docs.google.com/spreadsheets/d/${savedSheetId}/edit`);
       const savedSheetTitle = (savedSheetId === activeSheetId) ? activeSheetTitle : (getPersistentItem('g_sheets_connected_title') || '연동된 회원 데이터베이스');
 
@@ -330,7 +330,12 @@ export default function App() {
       let rows: UserRow[] = [];
       if (token) {
         // Authenticated Google Sheets API
-        rows = await fetchUserRows(token, sheetId);
+        try {
+          rows = await fetchUserRows(token, sheetId);
+        } catch (authErr) {
+          console.warn('Authenticated user rows fetch failed, trying public load fallback:', authErr);
+          rows = await fetchPublicUserRows(sheetId);
+        }
       } else {
         // Public Google Sheets CSV Export
         rows = await fetchPublicUserRows(sheetId);
