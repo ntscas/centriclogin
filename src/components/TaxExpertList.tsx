@@ -96,52 +96,20 @@ export default function TaxExpertList({
       const q = query(collection(db, 'board_posts'));
       const querySnapshot = await getDocs(q);
       const posts: BoardPost[] = [];
-      
-      const nowMs = Date.now();
-      const thirtyDaysAgoMs = nowMs - (30 * 24 * 60 * 60 * 1000);
-      const docsToDelete: string[] = [];
 
       querySnapshot.forEach((docSnapshot) => {
         const data = docSnapshot.data();
         const registeredDate = data.registeredDate || '';
-        let isExpired = false;
 
-        if (registeredDate) {
-          // registeredDate format is "YYYY-MM-DD HH:mm:ss"
-          const parsedMs = Date.parse(registeredDate.replace(/-/g, '/'));
-          if (!isNaN(parsedMs) && parsedMs < thirtyDaysAgoMs) {
-            isExpired = true;
-          }
-        } else if (data.createdAt) {
-          const createdAt = data.createdAt.toDate ? data.createdAt.toDate() : null;
-          if (createdAt && createdAt.getTime() < thirtyDaysAgoMs) {
-            isExpired = true;
-          }
-        }
-
-        if (isExpired) {
-          docsToDelete.push(docSnapshot.id);
-        } else {
-          posts.push({
-            id: data.id || docSnapshot.id,
-            title: data.title || '',
-            content: data.content || '',
-            writerName: data.writerName || '',
-            writerPhone: data.writerPhone || '',
-            registeredDate: registeredDate,
-          });
-        }
-      });
-
-      // Background cleanup of expired posts older than 30 days
-      if (docsToDelete.length > 0) {
-        console.log(`Pruning ${docsToDelete.length} expired board posts (older than 30 days)...`);
-        docsToDelete.forEach((docId) => {
-          deleteDoc(doc(db, 'board_posts', docId)).catch((deleteErr) => {
-            console.error('Failed to auto-delete expired post:', docId, deleteErr);
-          });
+        posts.push({
+          id: data.id || docSnapshot.id,
+          title: data.title || '',
+          content: data.content || '',
+          writerName: data.writerName || '',
+          writerPhone: data.writerPhone || '',
+          registeredDate: registeredDate,
         });
-      }
+      });
 
       // Sort in-memory to guarantee descending order by registeredDate
       posts.sort((a, b) => {
@@ -206,22 +174,13 @@ export default function TaxExpertList({
     // Helper to filter out any board posts that resemble user database fallback records or expired ones
     const cleanPosts = (posts: BoardPost[]): BoardPost[] => {
       if (!Array.isArray(posts)) return [];
-      const nowMs = Date.now();
-      const thirtyDaysAgoMs = nowMs - (30 * 24 * 60 * 60 * 1000);
 
       return posts.filter(post => {
         if (!post) return false;
         const idStr = String(post.id || '').trim();
         const titleStr = String(post.title || '').trim();
         const contentStr = String(post.content || '').trim();
-        const rDate = String(post.registeredDate || '').trim();
         
-        // Exclude older than 30 days
-        if (rDate) {
-          const parsedMs = Date.parse(rDate.replace(/-/g, '/'));
-          if (!isNaN(parsedMs) && parsedMs < thirtyDaysAgoMs) return false;
-        }
-
         // 🚨 1. If ID looks like a mobile phone number (digits only, e.g. starting with '010' or '8210')
         const cleanId = idStr.replace(/[^0-9]/g, '');
         const isPhoneId = (cleanId.startsWith('010') && cleanId.length >= 10) || (cleanId.startsWith('8210') && cleanId.length >= 11);
