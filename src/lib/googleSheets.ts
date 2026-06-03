@@ -373,7 +373,7 @@ export interface BoardPost {
 }
 
 /**
- * Helper to dynamically detect the existing board tab name (FreeBoard or FreeBoar) in the spreadsheet.
+ * Helper to dynamically detect the existing board tab name (FreeBoard, FreeBoar, 자유게시판, 게시판) in the spreadsheet.
  * Defaults to 'FreeBoard' if neither exists.
  */
 export async function detectBoardTabName(token: string, spreadsheetId: string): Promise<string> {
@@ -390,7 +390,7 @@ export async function detectBoardTabName(token: string, spreadsheetId: string): 
       const sheets: any[] = data.sheets || [];
       const foundSheet = sheets.find(s => {
         const t = String(s.properties?.title || '').trim().toLowerCase();
-        return t === 'freeboard' || t === 'freeboar';
+        return t === 'freeboard' || t === 'freeboar' || t === '자유게시판' || t === '게시판' || s.properties?.sheetId === 926715937;
       });
       if (foundSheet) {
         return foundSheet.properties.title;
@@ -403,7 +403,7 @@ export async function detectBoardTabName(token: string, spreadsheetId: string): 
 }
 
 /**
- * Checks if 'FreeBoard' or 'FreeBoar' tab exists, and if not, creates 'FreeBoard' with proper headers.
+ * Checks if 'FreeBoard' or another valid board tab exists, and if not, creates 'FreeBoard' with proper headers.
  */
 export async function ensureBoardSheet(token: string, spreadsheetId: string): Promise<void> {
   const getUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
@@ -422,10 +422,10 @@ export async function ensureBoardSheet(token: string, spreadsheetId: string): Pr
   const data = await response.json();
   const sheets: any[] = data.sheets || [];
   
-  // Accept either 'FreeBoard' or 'FreeBoar' (case-insensitive) as existing board sheets
+  // Accept board sheets with standard names or gid 926715937
   const boardSheetExists = sheets.some(s => {
     const t = String(s.properties?.title || '').trim().toLowerCase();
-    return t === 'freeboard' || t === 'freeboar';
+    return t === 'freeboard' || t === 'freeboar' || t === '자유게시판' || t === '게시판' || s.properties?.sheetId === 926715937;
   });
 
   if (!boardSheetExists) {
@@ -516,6 +516,93 @@ export async function appendBoardPost(token: string, spreadsheetId: string, post
 }
 
 /**
+ * Re-writes entire board records list to Board sheet, clean and neat.
+ */
+export async function overwriteBoardPosts(token: string, spreadsheetId: string, posts: BoardPost[]): Promise<void> {
+  const tabName = await detectBoardTabName(token, spreadsheetId);
+  await ensureBoardSheet(token, spreadsheetId);
+
+  // 1. Clear existing list starting from row 2
+  const clearResponse = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${tabName}!A2:Z1000:clear`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!clearResponse.ok) {
+    const errorText = await clearResponse.text();
+    throw new Error(`Failed to clear board sheet before overwriting: ${errorText}`);
+  }
+
+  if (posts.length === 0) return;
+
+  // 2. Format row values
+  const values = posts.map(post => [
+    post.id,
+    post.title,
+    post.content,
+    post.writerName,
+    post.writerPhone,
+    post.registeredDate
+  ]);
+
+  // 3. Write new values
+  const writeResponse = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${tabName}!A2?valueInputOption=USER_ENTERED`,
+    {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ values }),
+    }
+  );
+
+  if (!writeResponse.ok) {
+    const errorText = await writeResponse.text();
+    throw new Error(`Failed to update board sheet: ${errorText}`);
+  }
+}
+
+/**
+ * Universal helper to parse a raw string row into a typed BoardPost based on header index mappings
+ */
+function parseRowToBoardPost(row: string[], headers: string[], rowIndex: number): BoardPost {
+  const findIndex = (keys: string[], defaultIdx: number) => {
+    const idx = headers.findIndex(h => {
+      const s = String(h || '').toLowerCase().replace(/\s/g, '');
+      return keys.some(key => s.includes(key));
+    });
+    return idx >= 0 ? idx : defaultIdx;
+  };
+
+  const idIdx = headers.findIndex(h => {
+    const s = String(h || '').toLowerCase().replace(/\s/g, '');
+    return s === 'id' || s === '번호' || s === '순번' || s === 'no';
+  });
+
+  const titleIdx = findIndex(['제목', 'title', 'subject'], 0);
+  const contentIdx = findIndex(['내용', 'contents', 'content', 'body', 'memo'], 1);
+  const nameIdx = findIndex(['작성자', '이름', 'writer', 'author', 'name', 'poster'], 2);
+  const phoneIdx = findIndex(['연락처', '전화번호', 'phone', 'tel', 'contact', 'etc'], 3);
+  const dateIdx = findIndex(['등록일', '날짜', 'date', 'registered', 'time', '일자'], 4);
+
+  const id = idIdx >= 0 && row[idIdx] ? String(row[idIdx]).trim() : `post_${Date.now()}_${rowIndex}`;
+  const title = titleIdx < row.length ? String(row[titleIdx] || '').trim() : '';
+  const content = contentIdx < row.length ? String(row[contentIdx] || '').trim() : '';
+  const writerName = nameIdx < row.length ? String(row[nameIdx] || '').trim() : '익명회원';
+  const writerPhone = phoneIdx < row.length ? String(row[phoneIdx] || '').trim() : '';
+  const registeredDate = dateIdx < row.length ? String(row[dateIdx] || '').trim() : '';
+
+  return { id, title, content, writerName, writerPhone, registeredDate };
+}
+
+/**
  * Fetches board posts via authorized API
  */
 export async function fetchBoardPosts(token: string, spreadsheetId: string): Promise<BoardPost[]> {
@@ -547,53 +634,9 @@ export async function fetchBoardPosts(token: string, spreadsheetId: string): Pro
   const headers = values[0].map(h => String(h || '').trim());
   const rows = values.slice(1);
 
-  // Dynamically find indexes of the columns to handle spelling variations or rearrangement
-  const idIdx = headers.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s === 'id' || s === '번호' || s === '순번' || s === 'no';
-  });
-  const finalIdIdx = idIdx >= 0 ? idIdx : 0;
-
-  const titleIdx = headers.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('제목') || s.includes('title') || s.includes('subject');
-  });
-  const finalTitleIdx = titleIdx >= 0 ? titleIdx : 1;
-
-  const contentIdx = headers.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('내용') || s.includes('content') || s.includes('body');
-  });
-  const finalContentIdx = contentIdx >= 0 ? contentIdx : 2;
-
-  const nameIdx = headers.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('작성자') || s.includes('이름') || s.includes('writer') || s.includes('author') || s.includes('name');
-  });
-  const finalNameIdx = nameIdx >= 0 ? nameIdx : 3;
-
-  const phoneIdx = headers.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('연락처') || s.includes('전화번호') || s.includes('phone') || s.includes('tel') || s.includes('contact');
-  });
-  const finalPhoneIdx = phoneIdx >= 0 ? phoneIdx : 4;
-
-  const dateIdx = headers.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('등록일') || s.includes('날짜') || s.includes('date') || s.includes('registered') || s.includes('time') || s.includes('일자');
-  });
-  const finalDateIdx = dateIdx >= 0 ? dateIdx : 5;
-
   return rows
-    .filter(row => row[finalIdIdx] || row[finalTitleIdx])
-    .map(row => ({
-      id: String(row[finalIdIdx] || '').trim(),
-      title: String(row[finalTitleIdx] || '').trim(),
-      content: String(row[finalContentIdx] || '').trim(),
-      writerName: String(row[finalNameIdx] || '').trim(),
-      writerPhone: String(row[finalPhoneIdx] || '').trim(),
-      registeredDate: String(row[finalDateIdx] || '').trim(),
-    }));
+    .filter(row => row.some(cell => String(cell || '').trim() !== '')) // skip completely empty rows
+    .map((row, idx) => parseRowToBoardPost(row, headers, idx));
 }
 
 /**
@@ -652,88 +695,58 @@ function parseBoardCSV(text: string): BoardPost[] {
 
   const rows = lines.slice(1);
 
-  // Dynamically find indexes of the columns to handle spelling variations or rearrangement
-  const idIdx = headers.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s === 'id' || s === '번호' || s === '순번' || s === 'no';
-  });
-  const finalIdIdx = idIdx >= 0 ? idIdx : 0;
-
-  const titleIdx = headers.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('제목') || s.includes('title') || s.includes('subject');
-  });
-  const finalTitleIdx = titleIdx >= 0 ? titleIdx : 1;
-
-  const contentIdx = headers.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('내용') || s.includes('content') || s.includes('body');
-  });
-  const finalContentIdx = contentIdx >= 0 ? contentIdx : 2;
-
-  const nameIdx = headers.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('작성자') || s.includes('이름') || s.includes('writer') || s.includes('author') || s.includes('name');
-  });
-  const finalNameIdx = nameIdx >= 0 ? nameIdx : 3;
-
-  const phoneIdx = headers.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('연락처') || s.includes('전화번호') || s.includes('phone') || s.includes('tel') || s.includes('contact');
-  });
-  const finalPhoneIdx = phoneIdx >= 0 ? phoneIdx : 4;
-
-  const dateIdx = headers.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('등록일') || s.includes('날짜') || s.includes('date') || s.includes('registered') || s.includes('time') || s.includes('일자');
-  });
-  const finalDateIdx = dateIdx >= 0 ? dateIdx : 5;
-
   return rows
-    .filter(r => r[finalIdIdx] || r[finalTitleIdx])
-    .map(r => ({
-      id: String(r[finalIdIdx] || '').trim(),
-      title: String(r[finalTitleIdx] || '').trim(),
-      content: String(r[finalContentIdx] || '').trim(),
-      writerName: String(r[finalNameIdx] || '').trim(),
-      writerPhone: String(r[finalPhoneIdx] || '').trim(),
-      registeredDate: String(r[finalDateIdx] || '').trim(),
-    }));
+    .filter(r => r.some(cell => String(cell || '').trim() !== '')) // skip completely empty rows
+    .map((r, idx) => parseRowToBoardPost(r, headers, idx));
 }
 
 /**
  * Fetches board posts publicly via shared link (for non-admin viewer clients)
+ * Robustly tries known public configurations and explicit overrides.
  */
 export async function fetchPublicBoardPosts(spreadsheetId: string): Promise<BoardPost[]> {
-  let url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=FreeBoard`;
-  let response = await fetch(url);
-  
-  if (!response.ok) {
-    url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=FreeBoar`;
-    response = await fetch(url);
-  }
+  const targets = [
+    { type: 'gid', val: '926715937' },                       // Explicit GID tab from user's active board
+    { type: 'sheet', val: 'FreeBoard' },
+    { type: 'sheet', val: 'FreeBoar' },
+    { type: 'sheet', val: '자유게시판' },
+    { type: 'sheet', val: '게시판' }
+  ];
 
-  if (!response.ok) {
-    throw new Error('게시판 시트(FreeBoard 또는 FreeBoar)를 찾을 수 없거나 데이터 가져오기에 실패했습니다. 구글 시트 공유 설정에서 "링크가 있는 모든 사용자에게 공개"되어 있는지 확인해주세요.');
-  }
-
-  const text = await response.text();
-  let posts = parseBoardCSV(text);
-
-  // If FreeBoard public check returned empty (meaning it might have fell back to Users tab), retry explicitly with FreeBoar
-  if (posts.length === 0) {
-    const fallbackUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=FreeBoar`;
-    const fallbackResponse = await fetch(fallbackUrl);
-    if (fallbackResponse.ok) {
-      const fallbackText = await fallbackResponse.text();
-      const fallbackPosts = parseBoardCSV(fallbackText);
-      if (fallbackPosts.length > 0) {
-        return fallbackPosts;
+  for (const t of targets) {
+    try {
+      const paramName = t.type === 'gid' ? 'gid' : 'sheet';
+      const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&${paramName}=${encodeURIComponent(t.val)}`;
+      const response = await fetch(url);
+      if (response.ok) {
+        const text = await response.text();
+        const posts = parseBoardCSV(text);
+        if (posts && posts.length > 0) {
+          console.log(`Successfully fetched ${posts.length} board posts using ${t.type}='${t.val}'`);
+          return posts;
+        }
       }
+    } catch (e) {
+      console.warn(`Direct board fetch fallback for target ${t.type}=${t.val} skipped:`, e);
     }
   }
 
-  return posts;
+  // Final fallback: try default export (usually first visible tab)
+  try {
+    const defaultUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv`;
+    const response = await fetch(defaultUrl);
+    if (response.ok) {
+      const text = await response.text();
+      const posts = parseBoardCSV(text);
+      if (posts && posts.length > 0) {
+        return posts;
+      }
+    }
+  } catch (e) {
+    console.warn('Default sheet csv export fallback failed:', e);
+  }
+
+  throw new Error('게시판 시트 데이터를 가져오는 데 실패했습니다. 구글 시트 공유 설정에서 "링크가 있는 모든 사용자에게 공개"되어 있는지 확인해주세요.');
 }
 
 
