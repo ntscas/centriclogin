@@ -345,8 +345,8 @@ function parseCSV(text: string): UserRow[] {
  * Fetches spreadsheet rows from a publicly shared spreadsheet link
  */
 export async function fetchPublicUserRows(spreadsheetId: string): Promise<UserRow[]> {
-  // Try fetching the 'Users' tab first
-  const urlWithSheetName = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&sheet=Users`;
+  // Use Google Visualization API to request the specific 'Users' sheet in CSV format
+  const urlWithSheetName = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=Users`;
   let response = await fetch(urlWithSheetName);
   
   if (!response.ok) {
@@ -361,4 +361,379 @@ export async function fetchPublicUserRows(spreadsheetId: string): Promise<UserRo
   const text = await response.text();
   return parseCSV(text);
 }
+
+
+export interface BoardPost {
+  id: string;
+  title: string;
+  content: string;
+  writerName: string;
+  writerPhone: string;
+  registeredDate: string;
+}
+
+/**
+ * Helper to dynamically detect the existing board tab name (FreeBoard or FreeBoar) in the spreadsheet.
+ * Defaults to 'FreeBoard' if neither exists.
+ */
+export async function detectBoardTabName(token: string, spreadsheetId: string): Promise<string> {
+  try {
+    const getUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+    const response = await fetch(getUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      }
+    });
+    if (response.ok) {
+      const data = await response.json();
+      const sheets: any[] = data.sheets || [];
+      const foundSheet = sheets.find(s => {
+        const t = String(s.properties?.title || '').trim().toLowerCase();
+        return t === 'freeboard' || t === 'freeboar';
+      });
+      if (foundSheet) {
+        return foundSheet.properties.title;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to dynamically detect board tab name, using FreeBoard default:', e);
+  }
+  return 'FreeBoard';
+}
+
+/**
+ * Checks if 'FreeBoard' or 'FreeBoar' tab exists, and if not, creates 'FreeBoard' with proper headers.
+ */
+export async function ensureBoardSheet(token: string, spreadsheetId: string): Promise<void> {
+  const getUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+  const response = await fetch(getUrl, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    }
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch spreadsheet info to ensure FreeBoard: ${errorText}`);
+  }
+
+  const data = await response.json();
+  const sheets: any[] = data.sheets || [];
+  
+  // Accept either 'FreeBoard' or 'FreeBoar' (case-insensitive) as existing board sheets
+  const boardSheetExists = sheets.some(s => {
+    const t = String(s.properties?.title || '').trim().toLowerCase();
+    return t === 'freeboard' || t === 'freeboar';
+  });
+
+  if (!boardSheetExists) {
+    const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+    const updateResponse = await fetch(updateUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        requests: [
+          {
+            addSheet: {
+              properties: {
+                title: 'FreeBoard',
+                gridProperties: {
+                  rowCount: 1000,
+                  columnCount: 10,
+                },
+              },
+            },
+          },
+        ],
+      }),
+    });
+
+    if (!updateResponse.ok) {
+      const errorText = await updateResponse.text();
+      throw new Error(`Failed to create 'FreeBoard' tab: ${errorText}`);
+    }
+
+    const headerResponse = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/FreeBoard!A1:F1?valueInputOption=RAW`,
+      {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          values: [['ID', '제목', '내용', '작성자 이름', '작성자 연락처', '등록일']],
+        }),
+      }
+    );
+
+    if (!headerResponse.ok) {
+      const errorText = await headerResponse.text();
+      throw new Error(`Failed to initialize 'FreeBoard' headers: ${errorText}`);
+    }
+  }
+}
+
+/**
+ * Appends a board post
+ */
+export async function appendBoardPost(token: string, spreadsheetId: string, post: BoardPost): Promise<void> {
+  const tabName = await detectBoardTabName(token, spreadsheetId);
+  await ensureBoardSheet(token, spreadsheetId);
+
+  const rowData = [
+    post.id,
+    post.title,
+    post.content,
+    post.writerName,
+    post.writerPhone,
+    post.registeredDate
+  ];
+
+  const response = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${tabName}!A1:append?valueInputOption=USER_ENTERED`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        values: [rowData],
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to append board post: ${errorText}`);
+  }
+}
+
+/**
+ * Fetches board posts via authorized API
+ */
+export async function fetchBoardPosts(token: string, spreadsheetId: string): Promise<BoardPost[]> {
+  const tabName = await detectBoardTabName(token, spreadsheetId);
+  await ensureBoardSheet(token, spreadsheetId);
+
+  const response = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${tabName}!A1:Z1000`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch board posts: ${errorText}`);
+  }
+
+  const data = await response.json();
+  const values: string[][] = data.values || [];
+
+  if (values.length <= 1) {
+    return [];
+  }
+
+  const headers = values[0].map(h => String(h || '').trim());
+  const rows = values.slice(1);
+
+  // Dynamically find indexes of the columns to handle spelling variations or rearrangement
+  const idIdx = headers.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s === 'id' || s === '번호' || s === '순번' || s === 'no';
+  });
+  const finalIdIdx = idIdx >= 0 ? idIdx : 0;
+
+  const titleIdx = headers.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('제목') || s.includes('title') || s.includes('subject');
+  });
+  const finalTitleIdx = titleIdx >= 0 ? titleIdx : 1;
+
+  const contentIdx = headers.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('내용') || s.includes('content') || s.includes('body');
+  });
+  const finalContentIdx = contentIdx >= 0 ? contentIdx : 2;
+
+  const nameIdx = headers.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('작성자') || s.includes('이름') || s.includes('writer') || s.includes('author') || s.includes('name');
+  });
+  const finalNameIdx = nameIdx >= 0 ? nameIdx : 3;
+
+  const phoneIdx = headers.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('연락처') || s.includes('전화번호') || s.includes('phone') || s.includes('tel') || s.includes('contact');
+  });
+  const finalPhoneIdx = phoneIdx >= 0 ? phoneIdx : 4;
+
+  const dateIdx = headers.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('등록일') || s.includes('날짜') || s.includes('date') || s.includes('registered') || s.includes('time') || s.includes('일자');
+  });
+  const finalDateIdx = dateIdx >= 0 ? dateIdx : 5;
+
+  return rows
+    .filter(row => row[finalIdIdx] || row[finalTitleIdx])
+    .map(row => ({
+      id: String(row[finalIdIdx] || '').trim(),
+      title: String(row[finalTitleIdx] || '').trim(),
+      content: String(row[finalContentIdx] || '').trim(),
+      writerName: String(row[finalNameIdx] || '').trim(),
+      writerPhone: String(row[finalPhoneIdx] || '').trim(),
+      registeredDate: String(row[finalDateIdx] || '').trim(),
+    }));
+}
+
+/**
+ * Parses CSV for public board posts export
+ */
+function parseBoardCSV(text: string): BoardPost[] {
+  const lines: string[][] = [];
+  let row: string[] = [];
+  let inQuotes = false;
+  let currentVal = '';
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentVal += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      row.push(currentVal);
+      currentVal = '';
+    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') {
+        i++;
+      }
+      row.push(currentVal);
+      lines.push(row);
+      row = [];
+      currentVal = '';
+    } else {
+      currentVal += char;
+    }
+  }
+  if (currentVal || row.length > 0) {
+    row.push(currentVal);
+    lines.push(row);
+  }
+
+  if (lines.length <= 1) return [];
+
+  // Verify headers to make sure Google Sheets did not fallback to the Users/Logins sheet
+  const headers = lines[0].map(h => String(h || '').trim());
+  
+  // A signature of the Users DB is headers containing '전화번호', '비밀번호', or '기타 정보'
+  const headersStr = headers.map(h => h.toLowerCase().replace(/\s/g, '')).join(',');
+  const isUserFallback = headersStr.includes('전화번호') || headersStr.includes('비밀번호') || headersStr.includes('기타정보') || headersStr.includes('phonenumber');
+  
+  if (isUserFallback) {
+    console.warn('Google Sheets public export silently fell back to the main (Users) sheet because FreeBoard sheet does not exist yet.');
+    return [];
+  }
+
+  const rows = lines.slice(1);
+
+  // Dynamically find indexes of the columns to handle spelling variations or rearrangement
+  const idIdx = headers.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s === 'id' || s === '번호' || s === '순번' || s === 'no';
+  });
+  const finalIdIdx = idIdx >= 0 ? idIdx : 0;
+
+  const titleIdx = headers.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('제목') || s.includes('title') || s.includes('subject');
+  });
+  const finalTitleIdx = titleIdx >= 0 ? titleIdx : 1;
+
+  const contentIdx = headers.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('내용') || s.includes('content') || s.includes('body');
+  });
+  const finalContentIdx = contentIdx >= 0 ? contentIdx : 2;
+
+  const nameIdx = headers.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('작성자') || s.includes('이름') || s.includes('writer') || s.includes('author') || s.includes('name');
+  });
+  const finalNameIdx = nameIdx >= 0 ? nameIdx : 3;
+
+  const phoneIdx = headers.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('연락처') || s.includes('전화번호') || s.includes('phone') || s.includes('tel') || s.includes('contact');
+  });
+  const finalPhoneIdx = phoneIdx >= 0 ? phoneIdx : 4;
+
+  const dateIdx = headers.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('등록일') || s.includes('날짜') || s.includes('date') || s.includes('registered') || s.includes('time') || s.includes('일자');
+  });
+  const finalDateIdx = dateIdx >= 0 ? dateIdx : 5;
+
+  return rows
+    .filter(r => r[finalIdIdx] || r[finalTitleIdx])
+    .map(r => ({
+      id: String(r[finalIdIdx] || '').trim(),
+      title: String(r[finalTitleIdx] || '').trim(),
+      content: String(r[finalContentIdx] || '').trim(),
+      writerName: String(r[finalNameIdx] || '').trim(),
+      writerPhone: String(r[finalPhoneIdx] || '').trim(),
+      registeredDate: String(r[finalDateIdx] || '').trim(),
+    }));
+}
+
+/**
+ * Fetches board posts publicly via shared link (for non-admin viewer clients)
+ */
+export async function fetchPublicBoardPosts(spreadsheetId: string): Promise<BoardPost[]> {
+  let url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=FreeBoard`;
+  let response = await fetch(url);
+  
+  if (!response.ok) {
+    url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=FreeBoar`;
+    response = await fetch(url);
+  }
+
+  if (!response.ok) {
+    throw new Error('게시판 시트(FreeBoard 또는 FreeBoar)를 찾을 수 없거나 데이터 가져오기에 실패했습니다. 구글 시트 공유 설정에서 "링크가 있는 모든 사용자에게 공개"되어 있는지 확인해주세요.');
+  }
+
+  const text = await response.text();
+  let posts = parseBoardCSV(text);
+
+  // If FreeBoard public check returned empty (meaning it might have fell back to Users tab), retry explicitly with FreeBoar
+  if (posts.length === 0) {
+    const fallbackUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=FreeBoar`;
+    const fallbackResponse = await fetch(fallbackUrl);
+    if (fallbackResponse.ok) {
+      const fallbackText = await fallbackResponse.text();
+      const fallbackPosts = parseBoardCSV(fallbackText);
+      if (fallbackPosts.length > 0) {
+        return fallbackPosts;
+      }
+    }
+  }
+
+  return posts;
+}
+
 
