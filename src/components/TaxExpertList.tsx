@@ -25,7 +25,7 @@ import {
 import { UserRow, SpreadsheetConfig } from '../types';
 import { BoardPost, appendBoardPost, fetchBoardPosts, fetchPublicBoardPosts, overwriteBoardPosts } from '../lib/googleSheets';
 import { db } from '../lib/firebase';
-import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, where, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, where, limit, setDoc } from 'firebase/firestore';
 
 export interface Professional {
   id: number;
@@ -127,10 +127,11 @@ export default function TaxExpertList({
 
   const savePostToFirestore = async (post: BoardPost) => {
     try {
-      await addDoc(collection(db, 'board_posts'), {
+      await setDoc(doc(db, 'board_posts', post.id), {
         ...post,
         createdAt: serverTimestamp(),
       });
+      console.log('Successfully saved to Firestore Cloud DB:', post.id);
     } catch (err) {
       console.error('Firestore board save error:', err);
     }
@@ -138,38 +139,73 @@ export default function TaxExpertList({
 
   const updatePostInFirestore = async (postId: string, title: string, content: string) => {
     try {
-      const q = query(collection(db, 'board_posts'), where('id', '==', postId), limit(1));
-      const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        const docId = querySnapshot.docs[0].id;
-        const docRef = doc(db, 'board_posts', docId);
-        await updateDoc(docRef, {
-          title: title,
-          content: content,
-        });
-      }
+      // Direct update by post.id document
+      const docRef = doc(db, 'board_posts', postId);
+      await updateDoc(docRef, {
+        title: title,
+        content: content,
+      });
+      console.log('Successfully updated post directly in Firestore Cloud DB:', postId);
     } catch (err) {
-      console.error('Firestore board update error:', err);
+      // Fallback query for old legacy documents that used random auto-IDs
+      try {
+        const q = query(collection(db, 'board_posts'), where('id', '==', postId), limit(1));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          const docId = querySnapshot.docs[0].id;
+          const docRef = doc(db, 'board_posts', docId);
+          await updateDoc(docRef, {
+            title: title,
+            content: content,
+          });
+          console.log('Successfully updated legacy post in Firestore Cloud DB via query:', postId);
+        }
+      } catch (innerErr) {
+        console.error('Firestore board update error:', innerErr);
+      }
     }
   };
 
   const deletePostFromFirestore = async (postId: string) => {
     try {
-      const q = query(collection(db, 'board_posts'), where('id', '==', postId), limit(1));
-      const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        const docId = querySnapshot.docs[0].id;
-        const docRef = doc(db, 'board_posts', docId);
-        await deleteDoc(docRef);
-      }
+      // Direct delete by post.id document
+      const docRef = doc(db, 'board_posts', postId);
+      await deleteDoc(docRef);
+      console.log('Successfully deleted post directly from Firestore Cloud DB:', postId);
     } catch (err) {
-      console.error('Firestore board delete error:', err);
+      // Fallback query for old legacy documents that used random auto-IDs
+      try {
+        const q = query(collection(db, 'board_posts'), where('id', '==', postId), limit(1));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          const docId = querySnapshot.docs[0].id;
+          const docRef = doc(db, 'board_posts', docId);
+          await deleteDoc(docRef);
+          console.log('Successfully deleted legacy post from Firestore Cloud DB via query:', postId);
+        }
+      } catch (innerErr) {
+        console.error('Firestore board delete error:', innerErr);
+      }
     }
   };
 
   // Board loading and managing functions
   const loadBoardPosts = async (forceRefresh: boolean | any = false) => {
     const isForced = forceRefresh === true;
+
+    const normalizeDateForFingerprint = (dateStr: string): string => {
+      if (!dateStr) return '';
+      try {
+        const formattedDate = dateStr.replace(/\./g, '/').replace('오후', 'PM').replace('오전', 'AM');
+        const parsed = Date.parse(formattedDate);
+        if (!isNaN(parsed)) {
+          return String(Math.floor(parsed / 60000)); // normalize to nearest minute epoch
+        }
+      } catch (e) {
+        // ignore
+      }
+      return dateStr.replace(/[^0-9]/g, '').slice(0, 12); // fallback to YYYYMMDDHHMM digits
+    };
 
     // Helper to filter out any board posts that resemble user database fallback records or expired ones
     const cleanPosts = (posts: BoardPost[]): BoardPost[] => {
@@ -276,7 +312,8 @@ export default function TaxExpertList({
         const writerStr = (post.writerName || '').trim();
         const dateStr = (post.registeredDate || '').trim();
         
-        const fp = `${titleStr}_#_${contentStr}_#_${writerStr}_#_${dateStr}`;
+        const normDate = normalizeDateForFingerprint(dateStr);
+        const fp = `${titleStr}_#_${contentStr}_#_${writerStr}_#_${normDate}`;
         if (!seenFingerprints.has(fp)) {
           seenFingerprints.add(fp);
           uniqueByContent.push(post);
