@@ -264,8 +264,35 @@ export default function TaxExpertList({
 
       const mergedList = Array.from(map.values());
 
+      // 🚨 Super-robust, content-based strict deduplication.
+      // This wipes out any pre-existing duplicate posts (cloned and saved during older bugs) 
+      // by ensuring that no two posts with the same title, content, and author are shown or saved.
+      const uniqueByContent: BoardPost[] = [];
+      const seenFingerprints = new Set<string>();
+
+      mergedList.forEach(post => {
+        const titleStr = (post.title || '').trim();
+        const contentStr = (post.content || '').trim();
+        const writerStr = (post.writerName || '').trim();
+        const dateStr = (post.registeredDate || '').trim();
+        
+        const fp = `${titleStr}_#_${contentStr}_#_${writerStr}_#_${dateStr}`;
+        if (!seenFingerprints.has(fp)) {
+          seenFingerprints.add(fp);
+          uniqueByContent.push(post);
+        } else {
+          // If Firestore contains a duplicated post, auto-prune it in background to heal the Firestore collection!
+          if (post.id && !post.id.startsWith('post_stable_')) {
+            console.log('Background auto-pruning duplicate Firestore post doc:', post.id);
+            deletePostFromFirestore(post.id).catch(err => {
+              console.warn(`Failed to background-prune duplicate Firestore post: ${post.id}`, err);
+            });
+          }
+        }
+      });
+
       // Sort merged list in memory by registeredDate descending
-      const sorted = mergedList.sort((a, b) => {
+      const sorted = uniqueByContent.sort((a, b) => {
         const dateA = a.registeredDate || '';
         const dateB = b.registeredDate || '';
         return dateB.localeCompare(dateA);
