@@ -19,10 +19,11 @@ import {
   RefreshCw,
   FileText,
   CheckCircle,
-  Clock
+  Clock,
+  Zap
 } from 'lucide-react';
 import { UserRow, SpreadsheetConfig } from '../types';
-import { BoardPost, appendBoardPost, fetchBoardPosts, fetchPublicBoardPosts, overwriteBoardPosts } from '../lib/googleSheets';
+import { BoardPost } from '../lib/googleSheets';
 import { db } from '../lib/firebase';
 import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, where, limit } from 'firebase/firestore';
 
@@ -89,23 +90,59 @@ export default function TaxExpertList({
   const [editContent, setEditContent] = useState<string>('');
   const [isEditOpen, setIsEditOpen] = useState<boolean>(false);
 
-  // Firestore backup/hybrid helpers
+  // Firestore helpers
   const loadPostsFromFirestore = async (): Promise<BoardPost[]> => {
     try {
       const q = query(collection(db, 'board_posts'), orderBy('registeredDate', 'desc'));
       const querySnapshot = await getDocs(q);
       const posts: BoardPost[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        posts.push({
-          id: doc.id,
-          title: data.title || '',
-          content: data.content || '',
-          writerName: data.writerName || '',
-          writerPhone: data.writerPhone || '',
-          registeredDate: data.registeredDate || '',
-        });
+      
+      const nowMs = Date.now();
+      const thirtyDaysAgoMs = nowMs - (30 * 24 * 60 * 60 * 1000);
+      const docsToDelete: string[] = [];
+
+      querySnapshot.forEach((docSnapshot) => {
+        const data = docSnapshot.data();
+        const registeredDate = data.registeredDate || '';
+        let isExpired = false;
+
+        if (registeredDate) {
+          // registeredDate format is "YYYY-MM-DD HH:mm:ss"
+          const parsedMs = Date.parse(registeredDate.replace(/-/g, '/'));
+          if (!isNaN(parsedMs) && parsedMs < thirtyDaysAgoMs) {
+            isExpired = true;
+          }
+        } else if (data.createdAt) {
+          const createdAt = data.createdAt.toDate ? data.createdAt.toDate() : null;
+          if (createdAt && createdAt.getTime() < thirtyDaysAgoMs) {
+            isExpired = true;
+          }
+        }
+
+        if (isExpired) {
+          docsToDelete.push(docSnapshot.id);
+        } else {
+          posts.push({
+            id: data.id || docSnapshot.id,
+            title: data.title || '',
+            content: data.content || '',
+            writerName: data.writerName || '',
+            writerPhone: data.writerPhone || '',
+            registeredDate: registeredDate,
+          });
+        }
       });
+
+      // Background cleanup of expired posts older than 30 days
+      if (docsToDelete.length > 0) {
+        console.log(`Pruning ${docsToDelete.length} expired board posts (older than 30 days)...`);
+        docsToDelete.forEach((docId) => {
+          deleteDoc(doc(db, 'board_posts', docId)).catch((deleteErr) => {
+            console.error('Failed to auto-delete expired post:', docId, deleteErr);
+          });
+        });
+      }
+
       return posts;
     } catch (err) {
       console.error('Firestore board fetch error:', err);
@@ -155,19 +192,29 @@ export default function TaxExpertList({
     }
   };
 
-  // Google Sheets load function
+  // Board loading and managing functions
   const loadBoardPosts = async (forceRefresh: boolean | any = false) => {
     const isForced = forceRefresh === true;
 
-    // Helper to filter out any board posts that resemble user database fallback records
+    // Helper to filter out any board posts that resemble user database fallback records or expired ones
     const cleanPosts = (posts: BoardPost[]): BoardPost[] => {
       if (!Array.isArray(posts)) return [];
+      const nowMs = Date.now();
+      const thirtyDaysAgoMs = nowMs - (30 * 24 * 60 * 60 * 1000);
+
       return posts.filter(post => {
         if (!post) return false;
         const idStr = String(post.id || '').trim();
         const titleStr = String(post.title || '').trim();
         const contentStr = String(post.content || '').trim();
+        const rDate = String(post.registeredDate || '').trim();
         
+        // Exclude older than 30 days
+        if (rDate) {
+          const parsedMs = Date.parse(rDate.replace(/-/g, '/'));
+          if (!isNaN(parsedMs) && parsedMs < thirtyDaysAgoMs) return false;
+        }
+
         // 🚨 1. If ID looks like a mobile phone number (digits only, e.g. starting with '010' or '8210')
         const cleanId = idStr.replace(/[^0-9]/g, '');
         const isPhoneId = (cleanId.startsWith('010') && cleanId.length >= 10) || (cleanId.startsWith('8210') && cleanId.length >= 11);
@@ -195,14 +242,8 @@ export default function TaxExpertList({
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const validCache = cleanPosts(parsed);
-          if (validCache.length === parsed.length) {
-            cachedList = validCache;
-            setBoardPosts(validCache);
-          } else {
-            console.warn('Corrupted board cache detected. Cleaning up login database data from Board cache...');
-            localStorage.removeItem('centric_board_posts');
-            setBoardPosts([]);
-          }
+          cachedList = validCache;
+          setBoardPosts(validCache);
         }
       } catch (e) {
         console.error('Error parsing board posts cache:', e);
@@ -217,98 +258,8 @@ export default function TaxExpertList({
     setBoardError(null);
 
     try {
-      let sheetList: BoardPost[] = [];
       const firestoreList = await loadPostsFromFirestore();
-
-      const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
-
-      if (targetSpreadsheetId) {
-        try {
-          if (googleToken) {
-            sheetList = await fetchBoardPosts(googleToken, targetSpreadsheetId);
-          } else {
-            sheetList = await fetchPublicBoardPosts(targetSpreadsheetId);
-          }
-        } catch (sheetErr: any) {
-          console.warn('Google Sheets board fetch failed, falling back to local/Firestore data:', sheetErr);
-        }
-      }
-
-      // Filter fetched records to ensure no user database fallback leaks through
-      const cleanSheetList = cleanPosts(sheetList);
-      const cleanFirestoreList = cleanPosts(firestoreList);
-
-      // Combine both lists. Use post.id as primary unique key
-      const map = new Map<string, BoardPost>();
-      cleanSheetList.forEach(p => {
-        if (p.id) map.set(p.id, p);
-      });
-      cleanFirestoreList.forEach(p => {
-        if (p.id) map.set(p.id, p);
-      });
-
-      // Sort by registeredDate descending (or fallback to row index sequence and numeric ID weights for newest first)
-      const sorted = Array.from(map.values()).sort((a, b) => {
-        const dateA = a.registeredDate ? String(a.registeredDate).trim() : '';
-        const dateB = b.registeredDate ? String(b.registeredDate).trim() : '';
-
-        // If BOTH have non-empty dates, sort by date descending
-        if (dateA && dateB) {
-          const timeA = Date.parse(dateA.replace(/-/g, '/'));
-          const timeB = Date.parse(dateB.replace(/-/g, '/'));
-          
-          if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
-            return timeB - timeA; // Newer date first
-          }
-          
-          const strCompare = dateB.localeCompare(dateA);
-          if (strCompare !== 0) return strCompare;
-        }
-
-        // If at least one has an empty date, or dates are equal, determine order via ID weights
-        const getPostWeight = (p: BoardPost): number => {
-          const idStr = String(p.id || '');
-          if (/^\d+$/.test(idStr)) {
-            return parseInt(idStr, 10);
-          }
-          
-          // Pattern: lookup 13-digit Unix timestamp blocks e.g. post_1772590000000
-          const matches = idStr.match(/\d{13}/);
-          if (matches) {
-            let weight = parseInt(matches[0], 10);
-            
-            // Extract trailing sheet row index suffix e.g. post_1772590000000_15
-            const parts = idStr.split('_');
-            const lastPart = parts[parts.length - 1];
-            if (lastPart && /^\d+$/.test(lastPart) && lastPart !== matches[0]) {
-              const rowIndex = parseInt(lastPart, 10);
-              // A higher row index signifies a newer entry (added further down in the spreadsheet)
-              weight += rowIndex * 0.1;
-            }
-            return weight;
-          }
-
-          // Fallback parsing of trailing sequences
-          const anyDigits = idStr.match(/\d+/g);
-          if (anyDigits && anyDigits.length > 0) {
-            return parseInt(anyDigits[anyDigits.length - 1], 10);
-          }
-
-          return 0;
-        };
-
-        const weightA = getPostWeight(a);
-        const weightB = getPostWeight(b);
-        if (weightA !== weightB) {
-          return weightB - weightA; // Higher numeric weight (newer) first
-        }
-
-        // Final fallback: alphabetical sorting of registeredDate or ID string
-        if (dateA || dateB) {
-          return dateB.localeCompare(dateA);
-        }
-        return String(b.id).localeCompare(String(a.id));
-      });
+      const sorted = cleanPosts(firestoreList);
       
       // Update state and cache only if fetched posts differ from current cache to avoid unneeded blinking
       const hasChanged = JSON.stringify(sorted) !== JSON.stringify(cachedList);
@@ -353,18 +304,10 @@ export default function TaxExpertList({
         registeredDate: registeredDate,
       };
 
-      // 1. Save to Firestore
-      await savePostToFirestore(newPost);
-
-      // 2. Save directly to Google Sheet if Google oauth token is active
-      const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
-      if (googleToken && targetSpreadsheetId) {
-        try {
-          await appendBoardPost(googleToken, targetSpreadsheetId, newPost);
-        } catch (sheetErr: any) {
-          console.warn('Google Sheet append failed, but saved in secure backup database:', sheetErr);
-        }
-      }
+      // Save to Firestore in background for instant response time
+      savePostToFirestore(newPost).catch(err => {
+        console.error('Background Firestore save failed:', err);
+      });
 
       setPostTitle('');
       setPostContent('');
@@ -400,31 +343,12 @@ export default function TaxExpertList({
 
     setSubmitting(true);
     try {
-      // 1. Update in Firestore
-      await updatePostInFirestore(editingPost.id, editTitle.trim(), editContent.trim());
+      // Update in Firestore in background for ultra-speed UI response
+      updatePostInFirestore(editingPost.id, editTitle.trim(), editContent.trim()).catch(err => {
+        console.error('Background Firestore update failed:', err);
+      });
 
-      // 2. Update in Google Sheet if token is active
-      const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
-      if (googleToken && targetSpreadsheetId) {
-        try {
-          const currentPosts = await fetchBoardPosts(googleToken, targetSpreadsheetId);
-          const updatedList = currentPosts.map(p => {
-            if (p.id === editingPost.id) {
-              return {
-                ...p,
-                title: editTitle.trim(),
-                content: editContent.trim()
-              };
-            }
-            return p;
-          });
-          await overwriteBoardPosts(googleToken, targetSpreadsheetId, updatedList);
-        } catch (sheetErr: any) {
-          console.warn('Google Sheet update error, kept backup storage updated:', sheetErr);
-        }
-      }
-
-      // Update state locally
+      // Update state locally immediately
       setBoardPosts(prev => {
         const updated = prev.map(p => {
           if (p.id === editingPost.id) {
@@ -459,22 +383,12 @@ export default function TaxExpertList({
 
     setBoardLoading(true);
     try {
-      // 1. Delete from Firestore
-      await deletePostFromFirestore(postId);
+      // Delete from Firestore in background for ultra-speed UI response
+      deletePostFromFirestore(postId).catch(err => {
+        console.error('Background Firestore delete failed:', err);
+      });
 
-      // 2. Delete from Google Sheet if token is active
-      const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
-      if (googleToken && targetSpreadsheetId) {
-        try {
-          const currentPosts = await fetchBoardPosts(googleToken, targetSpreadsheetId);
-          const updatedList = currentPosts.filter(p => p.id !== postId);
-          await overwriteBoardPosts(googleToken, targetSpreadsheetId, updatedList);
-        } catch (sheetErr: any) {
-          console.warn('Google Sheet delete error, kept backup storage updated:', sheetErr);
-        }
-      }
-
-      // Update state locally
+      // Update state locally immediately
       setBoardPosts(prev => {
         const updated = prev.filter(p => p.id !== postId);
         localStorage.setItem('centric_board_posts', JSON.stringify(updated));
@@ -726,25 +640,33 @@ export default function TaxExpertList({
                 />
               </div>
               
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => loadBoardPosts(true)}
-                  disabled={boardLoading}
-                  className="flex items-center gap-1.5 px-3.5 py-2 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 text-sm font-medium transition cursor-pointer"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${boardLoading ? 'animate-spin' : ''}`} />
-                  <span>새로고침</span>
-                </button>
+              <div className="flex flex-wrap items-center gap-3">
+                {/* 실시간 클라우드 상태 표시기 */}
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700/90 border border-blue-100 rounded-lg text-xs font-semibold select-none">
+                  <Zap className="w-3.5 h-3.5 text-blue-500 fill-blue-500 animate-pulse" />
+                  <span>실시간 클라우드 DB (30일 유효)</span>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => setIsWriteOpen(true)}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition text-sm cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>새 글 쓰기</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => loadBoardPosts(true)}
+                    disabled={boardLoading}
+                    className="flex items-center gap-1.5 px-3.5 py-2 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 text-sm font-medium transition cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${boardLoading ? 'animate-spin' : ''}`} />
+                    <span>새로고침</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsWriteOpen(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition text-sm cursor-pointer whitespace-nowrap"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>새 글 쓰기</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
