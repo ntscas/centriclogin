@@ -90,6 +90,12 @@ export default function TaxExpertList({
   const [editContent, setEditContent] = useState<string>('');
   const [isEditOpen, setIsEditOpen] = useState<boolean>(false);
 
+  // Sync Diagnostics States
+  const [firestoreCount, setFirestoreCount] = useState<number | null>(null);
+  const [sheetCount, setSheetCount] = useState<number | null>(null);
+  const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'loading'>('loading');
+  const [dbErrorMessage, setDbErrorMessage] = useState<string | null>(null);
+
   // Firestore helpers
   const loadPostsFromFirestore = async (): Promise<BoardPost[]> => {
     try {
@@ -121,7 +127,7 @@ export default function TaxExpertList({
       return posts;
     } catch (err) {
       console.error('Firestore board fetch error:', err);
-      return [];
+      throw err; // Rethrow to show active diagnostics on screen
     }
   };
 
@@ -134,6 +140,7 @@ export default function TaxExpertList({
       console.log('Successfully saved to Firestore Cloud DB:', post.id);
     } catch (err) {
       console.error('Firestore board save error:', err);
+      throw err; // Rethrow to catch during form submittal and alert user
     }
   };
 
@@ -260,7 +267,20 @@ export default function TaxExpertList({
     setBoardError(null);
 
     try {
-      const firestoreList = await loadPostsFromFirestore();
+      setDbStatus('loading');
+      setDbErrorMessage(null);
+
+      let firestoreList: BoardPost[] = [];
+      try {
+        firestoreList = await loadPostsFromFirestore();
+        setFirestoreCount(firestoreList.length);
+        setDbStatus('connected');
+      } catch (fsErr: any) {
+        console.error('Firestore fetch failed in loadBoardPosts:', fsErr);
+        setDbStatus('error');
+        setDbErrorMessage(fsErr?.message || String(fsErr));
+        setFirestoreCount(0);
+      }
       
       // Load from Google Sheets as well as backup or primary source
       let sheetList: BoardPost[] = [];
@@ -273,9 +293,13 @@ export default function TaxExpertList({
           } else {
             sheetList = await fetchPublicBoardPosts(targetSpreadsheetId);
           }
+          setSheetCount(sheetList.length);
         } catch (sheetErr: any) {
           console.warn('Google Sheets board fetch failed, falling back to Firestore/local data:', sheetErr);
+          setSheetCount(0);
         }
+      } else {
+        setSheetCount(0);
       }
 
       const cleanFirestore = cleanPosts(firestoreList);
@@ -405,17 +429,17 @@ export default function TaxExpertList({
         registeredDate: registeredDate,
       };
 
-      // Save to Firestore in background for instant response time
-      savePostToFirestore(newPost).catch(err => {
-        console.error('Background Firestore save failed:', err);
-      });
+      // Save to Firestore and await to ensure it succeeds before celebrating!
+      await savePostToFirestore(newPost);
 
-      // Save to Google Sheet in background as backup sync if token is active
+      // Save to Google Sheet as backup sync if token is active
       const targetSpreadsheetId = connectedSheet?.spreadsheetId || '1KpApTrIuRpatfaVszLIkIBFYeeoROXxRSUGIPkHw4Yg';
       if (googleToken && targetSpreadsheetId) {
-        appendBoardPost(googleToken, targetSpreadsheetId, newPost).catch(sheetErr => {
-          console.warn('Background Google Sheet backup append failed:', sheetErr);
-        });
+        try {
+          await appendBoardPost(googleToken, targetSpreadsheetId, newPost);
+        } catch (sheetErr: any) {
+          console.warn('Google Sheet append backup failed:', sheetErr);
+        }
       }
 
       setPostTitle('');
@@ -429,10 +453,10 @@ export default function TaxExpertList({
         return updated;
       });
       
-      alert('게시글이 등록되었습니다!');
+      alert('게시글이 실시간 클라우드 DB에 성공적으로 등록되었습니다!');
     } catch (err: any) {
       console.error('Post submit error:', err);
-      alert(`게시글 등록 실패: ${err.message}`);
+      alert(`클라우드 DB 게시글 등록 실패: ${err.message || err}\n\n데이터베이스 연결 상태를 확인해주십시오.`);
     } finally {
       setSubmitting(false);
     }
@@ -818,6 +842,46 @@ export default function TaxExpertList({
           {/* 게시판 컨텐츠 영역 */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-8 w-full flex-1 flex flex-col justify-start">
 
+            {/* 실시간 백엔드 및 구글 시트 동기화 디바이스 현황 */}
+            <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs text-gray-600 shadow-xs" id="sync_diagnostics_bar">
+              <div className="flex flex-wrap items-center gap-3 md:gap-5">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-gray-700">데이터 실시간 연동 현황:</span>
+                </div>
+                
+                {/* 1. Firestore Cloud DB Status */}
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-2 h-2 rounded-full ${
+                    dbStatus === 'connected' ? 'bg-green-500 animate-pulse' : 
+                    dbStatus === 'loading' ? 'bg-amber-400' : 'bg-red-500'
+                  }`} />
+                  <span className="font-medium text-gray-700">구글 클라우드 DB (Firestore):</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase transition ${
+                    dbStatus === 'connected' ? 'bg-green-100 text-green-800' :
+                    dbStatus === 'loading' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
+                  }`}>
+                    {dbStatus === 'connected' ? `연결됨 (조회: ${firestoreCount ?? 0}건)` : 
+                     dbStatus === 'loading' ? '연결중...' : '연결 오류'}
+                  </span>
+                </div>
+
+                {/* 2. Google Sheets Backup Status */}
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="font-medium text-gray-700">구글 스프레드시트 (백업):</span>
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                    연결됨 ({sheetCount !== null ? `${sheetCount}건` : '로딩중...'})
+                  </span>
+                </div>
+              </div>
+
+              {dbErrorMessage && (
+                <div className="md:max-w-xs text-[10px] text-red-600 bg-red-50 border border-red-100 p-1.5 rounded flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />
+                  <span className="truncate">오류 상세: {dbErrorMessage}</span>
+                </div>
+              )}
+            </div>
 
             {boardLoading ? (
               <div className="text-center py-16 flex-1 flex flex-col items-center justify-center gap-3">
