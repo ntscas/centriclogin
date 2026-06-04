@@ -726,9 +726,6 @@ export default function TaxExpertList({
     <div 
       className="w-full bg-gray-50 min-h-screen text-gray-800 flex flex-col font-sans" 
       id="tax_expert_view_container"
-      onTouchStart={isBoardOpen ? handleTouchStart : undefined}
-      onTouchMove={isBoardOpen ? handleTouchMove : undefined}
-      onTouchEnd={isBoardOpen ? handleTouchEnd : undefined}
     >
       {/* 헤더 */}
       <header className="bg-white shadow-xs border-b" id="expert_header">
@@ -745,39 +742,11 @@ export default function TaxExpertList({
               }}
               title="조세전문가 초기화 및 맨위로 이동"
             >
-              {isBoardOpen ? '조세전문가 게시판' : '조세 전문가'}
+              조세 전문가
             </h1>
             <p className="hidden xs:block text-[10px] sm:text-xs md:text-sm text-gray-500 mt-0.5">
-              {isBoardOpen 
-                ? '조세전문가와 회원들이 자유롭게 소통하는 세금 지식 광장입니다' 
-                : '세금에 관한 최고의 전문가를 만나보세요'}
+              세금에 관한 최고의 전문가를 만나보세요
             </p>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {isBoardOpen ? (
-              <button
-                type="button"
-                onClick={() => setIsBoardOpen(false)}
-                className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3.5 sm:py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg shadow-xs border border-gray-200 transition text-[11px] sm:text-xs cursor-pointer whitespace-nowrap"
-                id="back_to_experts_btn"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-                <span>전문가 목록</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsBoardOpen(true);
-                  loadBoardPosts();
-                }}
-                className="flex items-center gap-1 px-3 py-1.5 sm:px-4 sm:py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-lg shadow-sm transition text-[11px] sm:text-xs cursor-pointer whitespace-nowrap"
-                id="open_board_btn"
-              >
-                <MessageSquare className="w-3.5 h-3.5" />
-                <span>조세전문가 게시판</span>
-              </button>
-            )}
           </div>
         </div>
       </header>
