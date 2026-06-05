@@ -869,23 +869,25 @@ export default function App() {
                           <span className="xs:hidden">조세전문가</span>
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIframeSrc('https://ntscas.github.io/taxexpertboard/');
-                            window.scrollTo({ top: 0, behavior: 'instant' });
-                          }}
-                          className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
-                            iframeSrc === 'https://ntscas.github.io/taxexpertboard/'
-                              ? 'bg-teal-600 text-white ring-1 ring-teal-600'
-                              : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
-                          }`}
-                          id="view_centric_board_btn"
-                        >
-                          <MessageSquare className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 shrink-0" />
-                          <span className="hidden xs:inline">게시판</span>
-                          <span className="xs:hidden">게시판</span>
-                        </button>
+                        {loggedInMember?.ncentric === 'Y' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIframeSrc('https://ntscas.github.io/taxexpertboard/');
+                              window.scrollTo({ top: 0, behavior: 'instant' });
+                            }}
+                            className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
+                              iframeSrc === 'https://ntscas.github.io/taxexpertboard/'
+                                ? 'bg-teal-600 text-white ring-1 ring-teal-600'
+                                : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
+                            }`}
+                            id="view_centric_board_btn"
+                          >
+                            <MessageSquare className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 shrink-0" />
+                            <span className="hidden xs:inline">게시판</span>
+                            <span className="xs:hidden">게시판</span>
+                          </button>
+                        )}
 
                         <button
                           type="button"
