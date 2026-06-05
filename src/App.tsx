@@ -316,6 +316,27 @@ export default function App() {
     };
   }, []);
 
+  // 1b. Login Routing: Determine initial active page based on user permissions
+  useEffect(() => {
+    if (loggedInMember) {
+      const isAiY = loggedInMember.ai === 'Y';
+      const isNcentricY = loggedInMember.ncentric === 'Y';
+      const isTaxtalkY = loggedInMember.taxtalk === 'Y';
+
+      if (!isAiY && !isNcentricY && !isTaxtalkY) {
+        setIframeSrc('');
+      } else if (isAiY) {
+        setIframeSrc('https://centrictax.vercel.app/');
+      } else if (isNcentricY) {
+        setIframeSrc('https://centrictax.vercel.app/centric_pro.html');
+      } else {
+        setIframeSrc('https://ntscas.github.io/taxexpertboard/');
+      }
+    } else {
+      setIframeSrc('https://centrictax.vercel.app/');
+    }
+  }, [loggedInMember]);
+
   // Quick Flash toast notifications
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
@@ -831,45 +852,49 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center gap-1 md:gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIframeSrc('https://centrictax.vercel.app/');
-                            setCentricAiResetTrigger(prev => prev + 1);
-                            window.scrollTo({ top: 0, behavior: 'instant' });
-                          }}
-                          className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
-                            iframeSrc === 'https://centrictax.vercel.app/'
-                              ? 'bg-teal-600 text-white ring-1 ring-teal-600'
-                              : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
-                          }`}
-                          id="view_centric_ai_btn"
-                        >
-                          <Sparkles className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 text-amber-500 shrink-0" />
-                          <span className="hidden xs:inline">CENTRIC AI</span>
-                          <span className="xs:hidden">CENTRIC AI</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIframeSrc('https://centrictax.vercel.app/centric_pro.html');
-                            setExpertResetTrigger(prev => prev + 1);
-                            window.scrollTo({ top: 0, behavior: 'instant' });
-                          }}
-                          className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
-                            iframeSrc === 'https://centrictax.vercel.app/centric_pro.html'
-                              ? 'bg-teal-600 text-white ring-1 ring-teal-600'
-                              : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
-                          }`}
-                          id="view_centric_pro_btn"
-                        >
-                          <Building2 className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 shrink-0" />
-                          <span className="hidden xs:inline">조세전문가</span>
-                          <span className="xs:hidden">조세전문가</span>
-                        </button>
+                        {loggedInMember?.ai === 'Y' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIframeSrc('https://centrictax.vercel.app/');
+                              setCentricAiResetTrigger(prev => prev + 1);
+                              window.scrollTo({ top: 0, behavior: 'instant' });
+                            }}
+                            className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
+                              iframeSrc === 'https://centrictax.vercel.app/'
+                                ? 'bg-teal-600 text-white ring-1 ring-teal-600'
+                                : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
+                            }`}
+                            id="view_centric_ai_btn"
+                          >
+                            <Sparkles className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 text-amber-500 shrink-0" />
+                            <span className="hidden xs:inline">CENTRIC AI</span>
+                            <span className="xs:hidden">CENTRIC AI</span>
+                          </button>
+                        )}
 
                         {loggedInMember?.ncentric === 'Y' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIframeSrc('https://centrictax.vercel.app/centric_pro.html');
+                              setExpertResetTrigger(prev => prev + 1);
+                              window.scrollTo({ top: 0, behavior: 'instant' });
+                            }}
+                            className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
+                              iframeSrc === 'https://centrictax.vercel.app/centric_pro.html'
+                                ? 'bg-teal-600 text-white ring-1 ring-teal-600'
+                                : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
+                            }`}
+                            id="view_centric_pro_btn"
+                          >
+                            <Building2 className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 shrink-0" />
+                            <span className="hidden xs:inline">조세전문가</span>
+                            <span className="xs:hidden">조세전문가</span>
+                          </button>
+                        )}
+
+                        {loggedInMember?.taxtalk === 'Y' && (
                           <button
                             type="button"
                             onClick={() => {
@@ -903,7 +928,13 @@ export default function App() {
 
                     {/* Integrated Page Local or Iframe Canvas */}
                     <div className="flex-1 w-full bg-white border border-t-0 border-slate-100 rounded-b-2xl md:rounded-b-3xl rounded-t-none overflow-visible shadow-lg relative min-h-[calc(100vh-220px)] flex flex-col" id="centric_pro_canvas">
-                      {iframeSrc === 'https://centrictax.vercel.app/' ? (
+                      {iframeSrc === '' ? (
+                        <div className="flex-1 w-full bg-slate-50 min-h-[650px] flex flex-col items-center justify-center p-8 text-center text-slate-500 rounded-b-2xl md:rounded-b-3xl" id="empty_portal_view">
+                          <AlertTriangle className="w-12 h-12 text-slate-300 mb-3" />
+                          <p className="font-semibold text-lg text-slate-700">이용할 수 있는 메뉴가 없습니다.</p>
+                          <p className="text-sm text-slate-400 mt-1">관리자에게 메뉴 활성화 권한을 확인해 주세요.</p>
+                        </div>
+                      ) : iframeSrc === 'https://centrictax.vercel.app/' ? (
                         <CentricAIHub key={`centric_ai_hub_${centricAiResetTrigger}`} />
                       ) : iframeSrc === 'https://centrictax.vercel.app/centric_pro.html' ? (
                         <TaxExpertList 
