@@ -6,6 +6,8 @@ export interface UserRow {
   otherInfo: string;
   registeredDate: string;
   ncentric?: string;
+  ai?: string;
+  taxtalk?: string;
 }
 
 export function extractSpreadsheetId(url: string): string | null {
@@ -159,6 +161,16 @@ export async function fetchUserRows(token: string, spreadsheetId: string): Promi
     return s.includes('ncentric');
   });
 
+  const aiIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s === 'ai' || s.includes('centricai');
+  });
+
+  const taxtalkIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('taxtalk') || s.includes('게시판');
+  });
+
   return rows
     .filter(row => row[finalPIndex]) // skip empty records
     .map(row => ({
@@ -169,6 +181,8 @@ export async function fetchUserRows(token: string, spreadsheetId: string): Promi
       otherInfo: row[finalOIndex] ? String(row[finalOIndex]).trim() : '',
       registeredDate: row[finalRIndex] ? String(row[finalRIndex]).trim() : '',
       ncentric: ncentIndex >= 0 && row[ncentIndex] ? String(row[ncentIndex]).trim() : '',
+      ai: aiIndex >= 0 && row[aiIndex] ? String(row[aiIndex]).trim() : '',
+      taxtalk: taxtalkIndex >= 0 && row[taxtalkIndex] ? String(row[taxtalkIndex]).trim() : '',
     }));
 }
 
@@ -341,6 +355,16 @@ function parseCSV(text: string): UserRow[] {
     return s.includes('ncentric');
   });
 
+  const aiIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s === 'ai' || s.includes('centricai');
+  });
+
+  const taxtalkIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('taxtalk') || s.includes('게시판');
+  });
+
   return rows
     .filter(r => r[finalPIndex])
     .map(r => ({
@@ -351,6 +375,8 @@ function parseCSV(text: string): UserRow[] {
       otherInfo: r[finalOIndex] ? String(r[finalOIndex]).trim() : '',
       registeredDate: r[finalRIndex] ? String(r[finalRIndex]).trim() : '',
       ncentric: ncentIndex >= 0 && r[ncentIndex] ? String(r[ncentIndex]).trim() : '',
+      ai: aiIndex >= 0 && r[aiIndex] ? String(r[aiIndex]).trim() : '',
+      taxtalk: taxtalkIndex >= 0 && r[taxtalkIndex] ? String(r[taxtalkIndex]).trim() : '',
     }));
 }
 
