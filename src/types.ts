@@ -6,6 +6,8 @@ export interface UserRow {
   otherInfo: string;
   registeredDate: string;
   ncentric?: string; // New field for NCENTRIC status ('Y' or other values)
+  ai?: string;
+  taxtalk?: string;
 }
 
 export interface SpreadsheetConfig {
