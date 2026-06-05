@@ -5,6 +5,7 @@ export interface UserRow {
   email: string;
   otherInfo: string;
   registeredDate: string;
+  ncentric?: string;
 }
 
 export function extractSpreadsheetId(url: string): string | null {
@@ -153,6 +154,11 @@ export async function fetchUserRows(token: string, spreadsheetId: string): Promi
   });
   const finalRIndex = rIndex >= 0 ? rIndex : 5;
 
+  const ncentIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('ncentric');
+  });
+
   return rows
     .filter(row => row[finalPIndex]) // skip empty records
     .map(row => ({
@@ -162,6 +168,7 @@ export async function fetchUserRows(token: string, spreadsheetId: string): Promi
       email: row[finalEIndex] ? String(row[finalEIndex]).trim() : '',
       otherInfo: row[finalOIndex] ? String(row[finalOIndex]).trim() : '',
       registeredDate: row[finalRIndex] ? String(row[finalRIndex]).trim() : '',
+      ncentric: ncentIndex >= 0 && row[ncentIndex] ? String(row[ncentIndex]).trim() : '',
     }));
 }
 
@@ -329,6 +336,11 @@ function parseCSV(text: string): UserRow[] {
   });
   const finalRIndex = rIndex >= 0 ? rIndex : 5;
 
+  const ncentIndex = header.findIndex(h => {
+    const s = h.toLowerCase().replace(/\s/g, '');
+    return s.includes('ncentric');
+  });
+
   return rows
     .filter(r => r[finalPIndex])
     .map(r => ({
@@ -338,6 +350,7 @@ function parseCSV(text: string): UserRow[] {
       email: r[finalEIndex] ? String(r[finalEIndex]).trim() : '',
       otherInfo: r[finalOIndex] ? String(r[finalOIndex]).trim() : '',
       registeredDate: r[finalRIndex] ? String(r[finalRIndex]).trim() : '',
+      ncentric: ncentIndex >= 0 && r[ncentIndex] ? String(r[ncentIndex]).trim() : '',
     }));
 }
 
@@ -459,7 +472,7 @@ export async function ensureBoardSheet(token: string, spreadsheetId: string): Pr
     }
 
     const headerResponse = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/FreeBoard!A1:F1?valueInputOption=RAW`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/FreeBoard!A1:F1?valueInputOption=USER_ENTERED`,
       {
         method: 'PUT',
         headers: {
@@ -467,7 +480,7 @@ export async function ensureBoardSheet(token: string, spreadsheetId: string): Pr
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          values: [['ID', '제목', '내용', '작성자 이름', '작성자 연락처', '등록일']],
+          values: [['id', 'title', 'content', 'writerName', 'writerPhone', 'registeredDate']],
         }),
       }
     );
@@ -475,6 +488,35 @@ export async function ensureBoardSheet(token: string, spreadsheetId: string): Pr
     if (!headerResponse.ok) {
       const errorText = await headerResponse.text();
       throw new Error(`Failed to initialize 'FreeBoard' headers: ${errorText}`);
+    }
+  } else {
+    // If the sheet already exists, let's verify if headers are written, and initialize them if they are missing
+    const tabName = await detectBoardTabName(token, spreadsheetId);
+    const checkUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tabName)}!A1:F1`;
+    const checkResponse = await fetch(checkUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      }
+    });
+    if (checkResponse.ok) {
+      const checkData = await checkResponse.json();
+      const rows = checkData.values || [];
+      if (rows.length === 0 || !rows[0] || rows[0].length === 0 || !String(rows[0][0]).trim()) {
+        await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tabName)}!A1:F1?valueInputOption=USER_ENTERED`,
+          {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              values: [['id', 'title', 'content', 'writerName', 'writerPhone', 'registeredDate']],
+            }),
+          }
+        );
+      }
     }
   }
 }
@@ -496,7 +538,7 @@ export async function appendBoardPost(token: string, spreadsheetId: string, post
   ];
 
   const response = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${tabName}!A1:append?valueInputOption=USER_ENTERED`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tabName)}!A1:append?valueInputOption=USER_ENTERED`,
     {
       method: 'POST',
       headers: {
@@ -524,7 +566,7 @@ export async function overwriteBoardPosts(token: string, spreadsheetId: string, 
 
   // 1. Clear existing list starting from row 2
   const clearResponse = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${tabName}!A2:Z1000:clear`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tabName)}!A2:Z1000:clear`,
     {
       method: 'POST',
       headers: {
@@ -552,7 +594,7 @@ export async function overwriteBoardPosts(token: string, spreadsheetId: string, 
 
   // 3. Write new values
   const writeResponse = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${tabName}!A2?valueInputOption=USER_ENTERED`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tabName)}!A2?valueInputOption=USER_ENTERED`,
     {
       method: 'PUT',
       headers: {
@@ -607,7 +649,7 @@ function parseRowToBoardPost(row: string[], headers: string[], rowIndex: number)
       hash = ((hash << 5) - hash) + fingerprint.charCodeAt(i);
       hash |= 0;
     }
-    id = `post_stable_${Math.abs(hash)}_${rowIndex}`;
+    id = `post_stable_${Math.abs(hash)}`;
   }
 
   return { id, title, content, writerName, writerPhone, registeredDate };
@@ -621,7 +663,7 @@ export async function fetchBoardPosts(token: string, spreadsheetId: string): Pro
   await ensureBoardSheet(token, spreadsheetId);
 
   const response = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${tabName}!A1:Z1000`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tabName)}!A1:Z1000`,
     {
       method: 'GET',
       headers: {
