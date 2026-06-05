@@ -5,6 +5,7 @@ export interface UserRow {
   email: string;
   otherInfo: string;
   registeredDate: string;
+  ncentric?: string; // New field for NCENTRIC status ('Y' or other values)
 }
 
 export interface SpreadsheetConfig {
