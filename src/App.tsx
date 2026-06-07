@@ -319,15 +319,15 @@ export default function App() {
   // 1b. Login Routing: Determine initial active page based on user permissions
   useEffect(() => {
     if (loggedInMember) {
-      const isAiY = loggedInMember.ai === 'Y';
-      const isNcentricY = loggedInMember.ncentric === 'Y';
-      const isTaxtalkY = loggedInMember.taxtalk === 'Y';
+      const isAiTrue = loggedInMember.ai?.toUpperCase() === 'TRUE';
+      const isNcentricTrue = loggedInMember.ncentric?.toUpperCase() === 'TRUE';
+      const isTaxtalkTrue = loggedInMember.taxtalk?.toUpperCase() === 'TRUE';
 
-      if (!isAiY && !isNcentricY && !isTaxtalkY) {
+      if (!isAiTrue && !isNcentricTrue && !isTaxtalkTrue) {
         setIframeSrc('');
-      } else if (isAiY) {
+      } else if (isAiTrue) {
         setIframeSrc('https://centrictax.vercel.app/');
-      } else if (isNcentricY) {
+      } else if (isNcentricTrue) {
         setIframeSrc('https://centrictax.vercel.app/centric_pro.html');
       } else {
         setIframeSrc('https://ntscas.github.io/taxexpertboard/');
@@ -852,7 +852,7 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center gap-1 md:gap-2 shrink-0">
-                        {loggedInMember?.ai === 'Y' && (
+                        {loggedInMember?.ai?.toUpperCase() === 'TRUE' && (
                           <button
                             type="button"
                             onClick={() => {
@@ -873,7 +873,7 @@ export default function App() {
                           </button>
                         )}
 
-                        {loggedInMember?.ncentric === 'Y' && (
+                        {loggedInMember?.ncentric?.toUpperCase() === 'TRUE' && (
                           <button
                             type="button"
                             onClick={() => {
@@ -894,7 +894,7 @@ export default function App() {
                           </button>
                         )}
 
-                        {loggedInMember?.taxtalk === 'Y' && (
+                        {loggedInMember?.taxtalk?.toUpperCase() === 'TRUE' && (
                           <button
                             type="button"
                             onClick={() => {
