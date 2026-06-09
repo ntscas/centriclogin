@@ -228,21 +228,36 @@ export default function App() {
       const savedPw = getPersistentItem('auto_login_pw');
 
       const normalizePhone = (phone: string) => {
-        let digits = phone.replace(/[^0-9]/g, '');
+        if (!phone) return '';
+        // Discard any trailing .0 decimal values before stripping non-digits
+        let digits = phone.split('.')[0].replace(/[^0-9]/g, '');
         if (digits.startsWith('8210') && digits.length >= 11) {
           digits = '0' + digits.slice(2);
         }
+        if (digits.length === 10 && digits.startsWith('10')) {
+          digits = '0' + digits;
+        }
         return digits;
+      };
+
+      const normalizePassword = (pw: string) => {
+        let clean = (pw || '').trim();
+        clean = clean.replace(/^['"‘“’“”\s]+|['"‘“’“”\s]+$/g, '');
+        if (clean.endsWith('.0')) {
+          clean = clean.slice(0, -2);
+        }
+        clean = clean.replace(/^['"‘“’“”\s]+|['"‘“’“”\s]+$/g, '');
+        return clean;
       };
 
       // Check auto-login instantly using cached user list from last session
       if (autoLoginEnabled && savedPhone && savedPw && isSubscribed) {
         const searchPhone = normalizePhone(savedPhone);
-        const searchPw = savedPw.trim();
+        const searchPw = normalizePassword(savedPw);
 
         const autoMatch = resolvedUsers.find(u => {
           const uPhone = normalizePhone(u.phoneNumber);
-          const uPassword = (u.password || '').trim();
+          const uPassword = normalizePassword(u.password);
           return uPhone === searchPhone && uPassword === searchPw;
         });
 
@@ -264,11 +279,11 @@ export default function App() {
             // Sync/Verify active session live with Google Sheets
             if (autoLoginEnabled && savedPhone && savedPw) {
               const searchPhone = normalizePhone(savedPhone);
-              const searchPw = savedPw.trim();
+              const searchPw = normalizePassword(savedPw);
 
               const remoteMatch = rows.find(u => {
                 const uPhone = normalizePhone(u.phoneNumber);
-                const uPassword = (u.password || '').trim();
+                const uPassword = normalizePassword(u.password);
                 return uPhone === searchPhone && uPassword === searchPw;
               });
 
@@ -628,16 +643,30 @@ export default function App() {
 
     // Resilient digit extractor & normalizer
     const normalize = (phone: string) => {
-      let digits = phone.replace(/[^0-9]/g, '');
-      // If it starts with Korean country code e.g. 821012345678 -> convert to standard 01012345678
+      if (!phone) return '';
+      // Discard any trailing .0 decimal values before stripping non-digits
+      let digits = phone.split('.')[0].replace(/[^0-9]/g, '');
       if (digits.startsWith('8210') && digits.length >= 11) {
         digits = '0' + digits.slice(2);
+      }
+      if (digits.length === 10 && digits.startsWith('10')) {
+        digits = '0' + digits;
       }
       return digits;
     };
 
+    const normalizePassword = (pw: string) => {
+      let clean = (pw || '').trim();
+      clean = clean.replace(/^['"‘“’“”\s]+|['"‘“’“”\s]+$/g, '');
+      if (clean.endsWith('.0')) {
+        clean = clean.slice(0, -2);
+      }
+      clean = clean.replace(/^['"‘“’“”\s]+|['"‘“’“”\s]+$/g, '');
+      return clean;
+    };
+
     const targetPhoneNormalized = normalize(phoneNumber);
-    const targetPasswordNormalized = password.trim();
+    const targetPasswordNormalized = normalizePassword(password);
 
     let activeUsers = users;
 
@@ -659,7 +688,7 @@ export default function App() {
     // Matches telephone formatting & password checks securely
     const match = activeUsers.find(u => {
       const dbPhoneNormalized = normalize(u.phoneNumber);
-      const dbPasswordNormalized = (u.password || '').trim();
+      const dbPasswordNormalized = normalizePassword(u.password);
       return dbPhoneNormalized === targetPhoneNormalized && dbPasswordNormalized === targetPasswordNormalized;
     });
 
