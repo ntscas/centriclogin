@@ -88,7 +88,7 @@ export async function initializeHeaders(token: string, spreadsheetId: string): P
  */
 export async function fetchUserRows(token: string, spreadsheetId: string): Promise<UserRow[]> {
   const response = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Users!A1:Z1000`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Users!A1:Z`,
     {
       method: 'GET',
       headers: {
@@ -225,7 +225,7 @@ export async function appendUserRow(token: string, spreadsheetId: string, user: 
 export async function overwriteUsers(token: string, spreadsheetId: string, users: UserRow[]): Promise<void> {
   // 1. Clear existing list starting from row 2
   const clearResponse = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Users!A2:Z1000:clear`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Users!A2:Z:clear`,
     {
       method: 'POST',
       headers: {
@@ -592,7 +592,7 @@ export async function overwriteBoardPosts(token: string, spreadsheetId: string, 
 
   // 1. Clear existing list starting from row 2
   const clearResponse = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tabName)}!A2:Z1000:clear`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tabName)}!A2:Z:clear`,
     {
       method: 'POST',
       headers: {
@@ -689,7 +689,7 @@ export async function fetchBoardPosts(token: string, spreadsheetId: string): Pro
   await ensureBoardSheet(token, spreadsheetId);
 
   const response = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tabName)}!A1:Z1000`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tabName)}!A1:Z`,
     {
       method: 'GET',
       headers: {
