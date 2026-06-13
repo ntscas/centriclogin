@@ -59,6 +59,7 @@ export default function MemberLogin({
   const [showRegPassword, setShowRegPassword] = useState(false);
   
   const [localError, setLocalError] = useState('');
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
 
   // In-app webview detector for KakaoTalk and Naver
   const [isInAppWebView] = useState(() => {
@@ -179,14 +180,21 @@ export default function MemberLogin({
       {/* Forms Segment */}
       <div className="p-8" id="login_form_section">
 
-        {/* PWA App Install Banner to make it extremely visible and easy to install */}
-        {deferredPrompt && (
-          <div className="mb-5 p-4 rounded-2xl bg-teal-50 border border-teal-100 text-xs leading-relaxed font-sans text-teal-800 shadow-xs" id="pwa_install_banner">
-            <div className="flex items-start gap-2.5">
-              <span className="text-sm mt-0.5 select-none">📱</span>
-              <div className="flex-1">
-                <span className="font-bold block text-sm mb-1 text-teal-900">홈 화면에 앱 추가</span>
-                <p className="text-teal-700/90 mb-3">홈 화면에 앱으로 설치하여 매번 주소 입력이나 검색 없이 원클릭으로 간편하게 접속하세요!</p>
+        {/* PWA App Install Banner: ALWAYS visible so users can easily see and install it on ANY platform */}
+        <div className="mb-5 p-4 rounded-2xl bg-teal-50 border border-teal-100 text-xs leading-relaxed font-sans text-teal-800 shadow-xs" id="pwa_install_banner">
+          <div className="flex items-start gap-2.5">
+            <span className="text-sm mt-0.5 select-none">📱</span>
+            <div className="flex-1">
+              <span className="font-bold block text-sm mb-1 text-teal-900 flex items-center gap-1.5">
+                홈 화면에 앱 추가
+                <span className="inline-block py-0.5 px-1.5 bg-teal-600/10 text-[10px] text-teal-700 font-bold rounded-md uppercase tracking-wider">추천 PWA</span>
+              </span>
+              <p className="text-teal-700/90 mb-3">
+                바탕화면에 앱으로 설치하여 매번 주소 입력 없이 원클릭 접속과 끊김없는 자동 로그인을 누리세요!
+              </p>
+              
+              {deferredPrompt ? (
+                /* Native browser prompt is supported and ready */
                 <button
                   type="button"
                   onClick={onInstallApp}
@@ -194,12 +202,61 @@ export default function MemberLogin({
                   id="installBtn"
                 >
                   <Smartphone className="w-3.5 h-3.5 text-white" />
-                  CENTRIC AI 앱 설치하기
+                  CENTRIC AI 원클릭 앱 설치하기
                 </button>
-              </div>
+              ) : (
+                /* Browser prompt not dispatched yet (e.g., iOS Safari, in-app webview or iframe) */
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowInstallGuide(!showInstallGuide)}
+                    className="w-full py-2.5 px-3 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                    id="install_guide_toggle_btn"
+                  >
+                    <Smartphone className="w-3.5 h-3.5 text-white" />
+                    {showInstallGuide ? '설치 안내 닫기' : 'CENTRIC AI 앱 설치 방법 보기'}
+                  </button>
+
+                  {showInstallGuide && (
+                    <div className="mt-3 p-3.5 bg-white border border-teal-100/80 rounded-xl space-y-3.5 text-slate-700 shadow-inner animate-fadeIn" id="manual_install_instructions">
+                      {/* iOS Safari */}
+                      <div>
+                        <span className="font-bold text-teal-900 block text-[11px] mb-1">🍎 아이폰 (Safari)</span>
+                        <ol className="list-decimal pl-4 space-y-0.5 text-slate-600">
+                          <li>Safari 브라우저 하단 central 바의 <strong className="text-teal-800 text-[12px]">공유 버튼(네모 속의 위 화살표 ⎙ 또는 ⎋)</strong>을 누릅니다.</li>
+                          <li>메뉴를 아래로 내려 <strong className="text-teal-800">‘홈 화면에 추가’</strong>를 선택해 주세요.</li>
+                        </ol>
+                      </div>
+
+                      {/* Android / Samsung / Chrome */}
+                      <div className="border-t border-slate-100 pt-3">
+                        <span className="font-bold text-teal-900 block text-[11px] mb-1">🤖 안드로이드 (크롬 / 삼성 인터넷)</span>
+                        <ol className="list-decimal pl-4 space-y-0.5 text-slate-600">
+                          <li>우측 상단 혹은 하단의 <strong className="text-teal-800">메뉴 버튼(세로 점 3개 ⋮ 또는 줄 3개 ☰)</strong>을 누릅니다.</li>
+                          <li>메뉴에서 <strong className="text-teal-800">‘앱 설치’</strong> 또는 <strong className="text-teal-800">‘홈 화면에 추가’</strong>를 선택해 주세요.</li>
+                        </ol>
+                      </div>
+
+                      {/* PC Chrome / Whale */}
+                      <div className="border-t border-slate-100 pt-3">
+                        <span className="font-bold text-teal-900 block text-[11px] mb-1">💻 PC 데스크톱 (크롬 / 웨일 / 엣지)</span>
+                        <p className="pl-1 text-slate-600 leading-normal">
+                          브라우저 주소창 최우측 부근의 <strong className="text-teal-800">설치 및 다운로드 아이콘(⊕ 또는 화살표 대지 모양)</strong>을 클릭하시면 즉시 앱으로 독립 설치됩니다.
+                        </p>
+                      </div>
+
+                      {/* Inside Iframe Info */}
+                      <div className="bg-amber-50 border border-amber-100 p-2.5 rounded-lg text-amber-900">
+                        <strong className="text-[10px] block mb-0.5">⚠️ 주의사항</strong>
+                        포탈 인앱 웹뷰(카카오톡, 네이버 앱 등)나 미리보기 웹 화면 내에서는 브라우저 보안 제약으로 직접 설치가 제한될 수 있습니다. 꼭 우측 상단의 <strong>'새 창'</strong> 혹은 <strong>외부 브라우저(크롬, 사파리)</strong>로 이동한 상태에서 설정을 진행해 주세요.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
 
         {/* KakaoTalk / Naver In-App Webview Warning */}
         {isInAppWebView && (
