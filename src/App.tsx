@@ -154,6 +154,7 @@ export default function App() {
   const [centricAiResetTrigger, setCentricAiResetTrigger] = useState(0);
   const [expertResetTrigger, setExpertResetTrigger] = useState(0);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallModal, setShowInstallModal] = useState(false);
   
   // Global actions loading & error feedback
   const [isLoading, setIsLoading] = useState(false);
@@ -976,19 +977,17 @@ export default function App() {
                           </button>
                         )}
 
-                        {deferredPrompt && (
-                          <button
-                            type="button"
-                            onClick={handleInstallApp}
-                            className="px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition bg-teal-50 text-teal-700 hover:bg-teal-100 ring-1 ring-teal-200/60 flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs"
-                            id="header_pwa_install_btn"
-                            title="홈 화면에 앱 설치하기"
-                          >
-                            <Smartphone className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 text-teal-600 shrink-0 animate-pulse" />
-                            <span className="hidden xs:inline">앱 설치</span>
-                            <span className="xs:hidden">설치</span>
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={deferredPrompt ? handleInstallApp : () => setShowInstallModal(true)}
+                          className="px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition bg-teal-50 text-teal-700 hover:bg-teal-100 ring-1 ring-teal-200/60 flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs"
+                          id="header_pwa_install_btn"
+                          title="스마트폰/PC 홈 화면에 CENTRIC AI 앱 설치하기"
+                        >
+                          <Smartphone className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 text-teal-600 shrink-0 animate-pulse" />
+                          <span className="hidden xs:inline">Centric AI 앱 설치</span>
+                          <span className="xs:hidden">앱 설치</span>
+                        </button>
 
                         <button
                           type="button"
@@ -1090,6 +1089,85 @@ export default function App() {
                 }}
               />
             </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* PWA INSTALLATION INSTRUCTIONS MODAL */}
+      <AnimatePresence>
+        {showInstallModal && (
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4" id="pwa_install_modal_wrapper">
+            <div className="absolute inset-0" onClick={() => setShowInstallModal(false)} />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="relative z-10 w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]"
+            >
+              <div className="p-6 bg-gradient-to-r from-teal-800 to-teal-700 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">📱</span>
+                  <div>
+                    <h3 className="font-bold text-sm tracking-tight">홈 화면에 CENTRIC AI 앱 설치</h3>
+                    <p className="text-[10px] text-teal-100/80">바탕화면에서 터치 한 번으로 즉시 이용하세요!</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowInstallModal(false)}
+                  className="w-7 h-7 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center font-bold text-sm cursor-pointer transition-all"
+                  title="닫기"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto space-y-4 text-xs text-slate-700 leading-relaxed font-sans">
+                <p className="text-slate-500 font-medium pb-2 text-center border-b border-slate-100">
+                  앱으로 설치하시면 별도의 브라우저 주소창이나 포털 검색 없이 스마트폰의 바탕화면에서 원클릭으로 안전한 자동 로그인 연결이 활성화됩니다.
+                </p>
+
+                {/* iOS Safari */}
+                <div className="p-3 bg-teal-50/50 rounded-2xl border border-teal-100/30">
+                  <span className="font-bold text-teal-900 block text-[11px] mb-1.5">🍎 아이폰 (Mobiles iOS Safari)</span>
+                  <ol className="list-decimal pl-4.5 space-y-1 text-slate-600">
+                    <li>인터넷 브라우저 하단 central 도구 모음의 <strong className="text-teal-800 font-semibold">공유/보내기 버튼(네모 안에서 위로 향하는 화살표 ⎙)</strong>을 찾습니다.</li>
+                    <li>목록을 아래로 스크롤하여 <strong className="text-teal-800 font-semibold">'홈 화면에 추가'</strong> 명령을 터치합니다.</li>
+                  </ol>
+                </div>
+
+                {/* Android / Samsung / Chrome */}
+                <div className="p-3 bg-teal-50/50 rounded-2xl border border-teal-100/30">
+                  <span className="font-bold text-teal-900 block text-[11px] mb-1.5">🤖 안드로이드 (크롬 / 삼성 인터넷)</span>
+                  <ol className="list-decimal pl-4.5 space-y-1 text-slate-600">
+                    <li>화면 우측 상단 또는 하단에 있는 <strong className="text-teal-800 font-semibold">메뉴 버튼(세로 점 3개 ⋮ 또는 줄 3개 ☰)</strong>을 엽니다.</li>
+                    <li>컨텍스트 목록 중 <strong className="text-teal-800 font-semibold">'앱 설치'</strong> 또는 <strong className="text-teal-800 font-semibold">'홈 화면에 추가'</strong> 항목을 선택합니다.</li>
+                  </ol>
+                </div>
+
+                {/* PC Chrome / Whale */}
+                <div className="p-3 bg-teal-50/50 rounded-2xl border border-teal-100/30">
+                  <span className="font-bold text-teal-900 block text-[11px] mb-1.5">💻 PC 컴퓨터 (Microsoft Edge, Whale, Chrome)</span>
+                  <p className="pl-1 text-slate-600">
+                    주소창 최우측의 <strong className="text-teal-800 font-semibold">설치 모니터 아이콘(⊕)</strong>을 클릭해 주시거나 주소 아이콘 클릭 후 <strong className="text-teal-800 font-semibold">'앱으로 설치'</strong>를 선택해 설치할 수 있습니다.
+                  </p>
+                </div>
+
+                {/* Core alert warning */}
+                <div className="p-3 bg-amber-50/80 border border-amber-200/50 rounded-2xl text-[11px] text-amber-900 leading-relaxed">
+                  <span className="font-bold block mb-1">💡 중요 참고 사항</span>
+                  카카오톡 브라우저나 네이버 브라우저(인앱 브라우저) 등에서는 직접적인 홈 화면 설치가 지원되지 않을 수 있습니다. 설치를 수월하게 진행하려면 <strong>기본 Safari(아이폰) 또는 크롬 브라우저(안드로이드)로 해당 인터넷 주소를 다시 열어</strong> 진행해 주세요!
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button
+                  onClick={() => setShowInstallModal(false)}
+                  className="px-5 py-2 bg-slate-700 hover:bg-slate-800 text-white font-bold rounded-xl cursor-pointer shadow-xs transition-colors"
+                >
+                  확인 및 닫기
+                </button>
+              </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
