@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Building2, Users, Settings, Database, RefreshCw, LogOut, 
   FileSpreadsheet, Sparkles, AlertTriangle, CheckCircle2, Phone, Home, ShieldCheck,
-  ExternalLink, MessageSquare
+  ExternalLink, MessageSquare, Smartphone
 } from 'lucide-react';
 
 import { UserRow, SpreadsheetConfig } from './types';
@@ -153,6 +153,7 @@ export default function App() {
   const [iframeSrc, setIframeSrc] = useState('https://centrictax.vercel.app/');
   const [centricAiResetTrigger, setCentricAiResetTrigger] = useState(0);
   const [expertResetTrigger, setExpertResetTrigger] = useState(0);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   
   // Global actions loading & error feedback
   const [isLoading, setIsLoading] = useState(false);
@@ -330,6 +331,38 @@ export default function App() {
       if (authUnsubscribe) authUnsubscribe();
     };
   }, []);
+
+  // 1c. PWA installation handling via beforeinstallprompt
+  useEffect(() => {
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      console.log('beforeinstallprompt event detected & saved');
+    };
+
+    const handleAppInstalled = () => {
+      console.log('CENTRICA AI가 성공적으로 설치되었습니다.');
+      setDeferredPrompt(null);
+      triggerToast('CENTRIC AI가 성공적으로 설치되었습니다.');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`사용자 선택 결과: ${outcome}`);
+      setDeferredPrompt(null);
+    }
+  };
 
   // 1b. Login Routing: Determine initial active page based on user permissions
   useEffect(() => {
@@ -943,6 +976,20 @@ export default function App() {
                           </button>
                         )}
 
+                        {deferredPrompt && (
+                          <button
+                            type="button"
+                            onClick={handleInstallApp}
+                            className="px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition bg-teal-50 text-teal-700 hover:bg-teal-100 ring-1 ring-teal-200/60 flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs"
+                            id="header_pwa_install_btn"
+                            title="홈 화면에 앱 설치하기"
+                          >
+                            <Smartphone className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 text-teal-600 shrink-0 animate-pulse" />
+                            <span className="hidden xs:inline">앱 설치</span>
+                            <span className="xs:hidden">설치</span>
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={handleLogout}
@@ -992,6 +1039,8 @@ export default function App() {
                     errorMsg={errorMsg}
                     connectedSheet={connectedSheet}
                     totalUsersCount={users.length}
+                    deferredPrompt={deferredPrompt}
+                    onInstallApp={handleInstallApp}
                   />
                 )}
               </div>
