@@ -2,39 +2,18 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { 
   Phone, Lock, Eye, EyeOff, UserPlus, LogIn, Sparkles, Building2, User, 
-  Mail, FileText, CheckCircle2 
+  Mail, FileText, CheckCircle2, Smartphone 
 } from 'lucide-react';
 import { UserRow } from '../types';
 
-// Cookie/LocalStorage persistent getter helper for mobile WebView compatibility
-const getPersistentItem = (key: string): string | null => {
-  let val: string | null = null;
+// Robust LocalStorage getter helper for sandbox safety
+const safeGetLocalStorage = (key: string): string | null => {
   try {
-    val = localStorage.getItem(key);
+    return localStorage.getItem(key);
   } catch (e) {
-    console.warn('LocalStorage getItem error:', e);
+    console.warn('LocalStorage access is blocked or restricted:', e);
+    return null;
   }
-  if (!val && typeof document !== 'undefined') {
-    try {
-      const nameEQ = key + "=";
-      const ca = document.cookie.split(';');
-      for (let i = 0; i < ca.length; i++) {
-        let c = ca[i];
-        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
-        if (c.indexOf(nameEQ) === 0) {
-          val = decodeURIComponent(c.substring(nameEQ.length, c.length));
-          // Auto-heal localStorage
-          try {
-            localStorage.setItem(key, val);
-          } catch (_) {}
-          break;
-        }
-      }
-    } catch (e) {
-      console.warn('Cookie get error:', e);
-    }
-  }
-  return val;
 };
 
 interface MemberLoginProps {
@@ -44,6 +23,8 @@ interface MemberLoginProps {
   errorMsg: string;
   connectedSheet: { title: string; spreadsheetId: string } | null;
   totalUsersCount: number;
+  deferredPrompt: any;
+  onInstallApp: () => void;
 }
 
 export default function MemberLogin({ 
@@ -52,18 +33,20 @@ export default function MemberLogin({
   isLoading: isActionLoading, 
   errorMsg,
   connectedSheet,
-  totalUsersCount
+  totalUsersCount,
+  deferredPrompt,
+  onInstallApp
 }: MemberLoginProps) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState(() => {
-    return getPersistentItem('auto_login_phone') || '';
+    return safeGetLocalStorage('auto_login_phone') || '';
   });
   const [password, setPassword] = useState(() => {
-    return getPersistentItem('auto_login_pw') || '';
+    return safeGetLocalStorage('auto_login_pw') || '';
   });
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(() => {
-    const saved = getPersistentItem('auto_login_enabled');
+    const saved = safeGetLocalStorage('auto_login_enabled');
     return saved === null ? true : saved === 'true';
   });
   
@@ -76,6 +59,26 @@ export default function MemberLogin({
   const [showRegPassword, setShowRegPassword] = useState(false);
   
   const [localError, setLocalError] = useState('');
+
+  // In-app webview detector for KakaoTalk and Naver
+  const [isInAppWebView] = useState(() => {
+    if (typeof navigator !== 'undefined') {
+      const ua = navigator.userAgent.toLowerCase();
+      return ua.includes('kakaotalk') || ua.includes('naver');
+    }
+    return false;
+  });
+
+  const handleOpenExternalBrowser = () => {
+    if (typeof window !== 'undefined') {
+      const currentUrl = window.location.href;
+      if (navigator.userAgent.toLowerCase().includes('kakaotalk')) {
+        window.location.href = `kakaotalk://web/openExternalApp?url=${encodeURIComponent(currentUrl)}`;
+      } else {
+        alert("상단 오른쪽[...] 버튼 또는 메뉴 버튼을 눌러 '기본 브라우저로 열기(Safari/Chrome)'를 선택해 주세요. 해당 모드로 전환해야 로그인이 항시 유지됩니다!");
+      }
+    }
+  };
 
   // Auto-format phone number: e.g. 01012345678 -> 010-1234-5678
   const formatPhoneNumber = (val: string) => {
@@ -175,6 +178,49 @@ export default function MemberLogin({
 
       {/* Forms Segment */}
       <div className="p-8" id="login_form_section">
+
+        {/* PWA App Install Banner to make it extremely visible and easy to install */}
+        {deferredPrompt && (
+          <div className="mb-5 p-4 rounded-2xl bg-teal-50 border border-teal-100 text-xs leading-relaxed font-sans text-teal-800 shadow-xs" id="pwa_install_banner">
+            <div className="flex items-start gap-2.5">
+              <span className="text-sm mt-0.5 select-none">📱</span>
+              <div className="flex-1">
+                <span className="font-bold block text-sm mb-1 text-teal-900">홈 화면에 앱 추가</span>
+                <p className="text-teal-700/90 mb-3">홈 화면에 앱으로 설치하여 매번 주소 입력이나 검색 없이 원클릭으로 간편하게 접속하세요!</p>
+                <button
+                  type="button"
+                  onClick={onInstallApp}
+                  className="w-full py-2.5 px-3 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                  id="installBtn"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-white" />
+                  CENTRIC AI 앱 설치하기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* KakaoTalk / Naver In-App Webview Warning */}
+        {isInAppWebView && (
+          <div className="mb-5 p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs leading-relaxed font-sans text-amber-800" id="inapp_webview_banner">
+            <div className="flex items-start gap-2.5">
+              <span className="text-sm mt-0.5 select-none">💡</span>
+              <div className="flex-1">
+                <span className="font-bold block text-sm mb-1 text-slate-800">자동 로그인 유지 안내</span>
+                카카오톡/네이버 등의 <span className="underline font-semibold text-slate-900">앱 기본 창(인앱 웹뷰)</span>은 닫힐 때 세션 데이터가 종종 초기화됩니다. 아래 버튼을 눌러 스마트폰의 <strong>기본 브라우저(크롬/사파리)</strong>로 접속하시면 로그인 상태가 안전하게 무한 유지됩니다!
+                <button
+                  type="button"
+                  onClick={handleOpenExternalBrowser}
+                  className="mt-3 w-full py-2.5 px-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  사파리 / 크롬 브라우저로 열기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Error notification banner */}
         {(errorMsg || localError) && (
