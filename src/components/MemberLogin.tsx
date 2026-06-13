@@ -204,21 +204,20 @@ export default function MemberLogin({
   return (
     <div className="w-full max-w-md bg-white rounded-3xl border border-gray-100 shadow-xl overflow-hidden self-center mx-auto" id="login_component_wrapper">
       {/* Visual Header */}
-      <div className="bg-slate-900 px-8 py-8 text-center relative overflow-hidden" id="login_visual_header">
+      <div className="bg-slate-900 px-6 py-5 text-center relative overflow-hidden" id="login_visual_header">
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(100,116,139,0.15),transparent)] pointer-events-none" />
-        <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-slate-800 text-teal-400 mb-4 shadow-inner" id="login_logo_badge">
-          <Building2 className="w-6 h-6" />
-        </div>
-        <h2 className="text-2xl font-bold font-sans tracking-tight text-white mb-1">
+        <h2 className="text-xl font-bold font-sans tracking-tight text-white">
           {isSignUp ? '신규 회원가입' : '사용자 로그인'}
         </h2>
-        <p className="text-slate-400 text-sm font-sans">
-          {isSignUp ? '사용자 정보를 스프레드시트에 안전하게 등록합니다' : '전화번호와 비밀번호로 간편하게 본인인증하기'}
-        </p>
+        {isSignUp && (
+          <p className="text-slate-400 text-xs font-sans mt-1">
+            사용자 정보를 스프레드시트에 안전하게 등록합니다
+          </p>
+        )}
       </div>
 
       {/* Forms Segment */}
-      <div className="p-8" id="login_form_section">
+      <div className="p-5" id="login_form_section">
 
         {/* PWA App Install Banner: ALWAYS visible so users can easily see and install it on ANY platform */}
         <div className="mb-5 p-4 rounded-2xl bg-teal-50 border border-teal-100 text-xs leading-relaxed font-sans text-teal-800 shadow-xs" id="pwa_install_banner">
@@ -303,15 +302,15 @@ export default function MemberLogin({
                         id="inapp_guide_toggle_btn"
                       >
                         <Sparkles className="w-3.5 h-3.5 text-white animate-pulse" />
-                        {showInAppGuide ? '카카오톡/네이버 간편접속 안내 닫기' : '카카오톡/네이버 로그인 풀림 해결방법 보기'}
+                        {showInAppGuide ? '카카오톡 등 로그인 해결방법 닫기' : '카카오톡 등 로그인 해결방법 보기'}
                       </button>
 
                       {showInAppGuide && (
                         <div className="mt-3 p-4 rounded-xl bg-white border border-amber-200 text-xs leading-relaxed font-sans text-amber-950 shadow-inner animate-fadeIn space-y-3" id="inapp_webview_banner_toggleable">
                           <div>
-                            <span className="font-bold block text-sm mb-1 text-slate-900">카카오톡/네이버 인앱 브라우저 안내</span>
+                            <span className="font-bold block text-sm mb-1 text-slate-900">카카오톡 등 인앱 브라우저 안내</span>
                             <p className="text-amber-800">
-                              카카오톡이나 네이버 앱 내부에서 열린 화면은 닫힐 때 <span className="underline font-semibold">자동 로그인이 풀리며, 홈 화면 앱 추가(PWA)가 어렵습니다.</span> 보다 안정적인 로그인 상태 유지와 앱 설치를 위해 아래 가이드 항목 중 편하신 방법을 선택해 주세요!
+                              카카오톡이나 네이버 등 가상 브라우저 내부에서 열린 화면은 닫힐 때 <span className="underline font-semibold">자동 로그인이 풀리며, 홈 화면 앱 추가(PWA)가 어렵습니다.</span> 보다 안정적인 로그인 상태 유지와 앱 설치를 위해 아래 가이드 항목 중 편하신 방법을 선택해 주세요!
                             </p>
                           </div>
 
@@ -609,27 +608,29 @@ export default function MemberLogin({
           </form>
         )}
 
-        {/* Form Toggle Slider Footer */}
-        <div className="mt-6 pt-5 border-t border-slate-100 text-center" id="switch_form_footer">
-          <button
-            type="button"
-            onClick={() => {
-              setIsSignUp(!isSignUp);
-              setLocalError('');
-            }}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-600 hover:text-teal-800 tracking-wide font-sans cursor-pointer transition select-none"
-          >
-            {isSignUp ? (
-              <>
-                기존 계정이 있으신가요? <span className="underline">로그인하기</span>
-              </>
-            ) : (
-              <>
-                아직 회원이 아니신가요? <span className="underline font-bold">1초만에 회원가입</span>
-              </>
-            )}
-          </button>
-        </div>
+        {/* Form Toggle Slider Footer (Hidden for now as requested, ready for future use) */}
+        {false && (
+          <div className="mt-6 pt-5 border-t border-slate-100 text-center" id="switch_form_footer">
+            <button
+              type="button"
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setLocalError('');
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-600 hover:text-teal-800 tracking-wide font-sans cursor-pointer transition select-none"
+            >
+              {isSignUp ? (
+                <>
+                  기존 계정이 있으신가요? <span className="underline">로그인하기</span>
+                </>
+              ) : (
+                <>
+                  아직 회원이 아니신가요? <span className="underline font-bold">1초만에 회원가입</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
