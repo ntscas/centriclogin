@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { 
   Phone, Lock, Eye, EyeOff, UserPlus, LogIn, Sparkles, Building2, User, 
-  Mail, FileText, CheckCircle2, Smartphone 
+  Mail, FileText, CheckCircle2, Smartphone, Copy, Check 
 } from 'lucide-react';
 import { UserRow } from '../types';
 
@@ -60,6 +60,7 @@ export default function MemberLogin({
   
   const [localError, setLocalError] = useState('');
   const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   // In-app webview detector for KakaoTalk and Naver
   const [isInAppWebView] = useState(() => {
@@ -69,6 +70,44 @@ export default function MemberLogin({
     }
     return false;
   });
+
+  const fallbackCopyText = (text: string) => {
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.top = "0";
+      textArea.style.left = "0";
+      textArea.style.position = "fixed";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      if (successful) {
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 3000);
+      }
+    } catch (err) {
+      console.error('Fallback copy failed', err);
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (typeof window === 'undefined') return;
+    const url = window.location.href;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url)
+        .then(() => {
+          setCopySuccess(true);
+          setTimeout(() => setCopySuccess(false), 3000);
+        })
+        .catch(() => {
+          fallbackCopyText(url);
+        });
+    } else {
+      fallbackCopyText(url);
+    }
+  };
 
   const handleOpenExternalBrowser = () => {
     if (typeof window !== 'undefined') {
@@ -260,20 +299,70 @@ export default function MemberLogin({
 
         {/* KakaoTalk / Naver In-App Webview Warning */}
         {isInAppWebView && (
-          <div className="mb-5 p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs leading-relaxed font-sans text-amber-800" id="inapp_webview_banner">
+          <div className="mb-5 p-4 rounded-2xl bg-amber-50/90 border border-amber-200 text-xs leading-relaxed font-sans text-amber-900 shadow-sm" id="inapp_webview_banner">
             <div className="flex items-start gap-2.5">
-              <span className="text-sm mt-0.5 select-none">💡</span>
-              <div className="flex-1">
-                <span className="font-bold block text-sm mb-1 text-slate-800">자동 로그인 유지 안내</span>
-                카카오톡/네이버 등의 <span className="underline font-semibold text-slate-900">앱 기본 창(인앱 웹뷰)</span>은 닫힐 때 세션 데이터가 종종 초기화됩니다. 아래 버튼을 눌러 스마트폰의 <strong>기본 브라우저(크롬/사파리)</strong>로 접속하시면 로그인 상태가 안전하게 무한 유지됩니다!
-                <button
-                  type="button"
-                  onClick={handleOpenExternalBrowser}
-                  className="mt-3 w-full py-2.5 px-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-1.5"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  사파리 / 크롬 브라우저로 열기
-                </button>
+              <span className="text-base mt-0.5 select-none">⚠️</span>
+              <div className="flex-1 space-y-3">
+                <div>
+                  <span className="font-bold block text-sm mb-1 text-slate-900">카카오톡/네이버 인앱 브라우저 안내</span>
+                  <p className="text-amber-800">
+                    카카오톡이나 네이버 앱 내부에서 열린 화면은 닫힐 때 <span className="underline font-semibold">자동 로그인이 풀리며, 홈 화면 앱 추가(PWA)가 어렵습니다.</span> 보다 안정적인 로그인 상태 유지와 앱 설치를 위해 아래 가이드 항목 중 편하신 방법을 선택해 주세요!
+                  </p>
+                </div>
+
+                {/* Option buttons */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleOpenExternalBrowser}
+                    className="w-full py-2.5 px-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    자동으로 외부 앱 열기
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className={`w-full py-2.5 px-3 font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+                      copySuccess 
+                        ? 'bg-teal-600 text-white hover:bg-teal-700' 
+                        : 'bg-white border border-amber-300 text-slate-800 hover:bg-amber-100'
+                    }`}
+                  >
+                    {copySuccess ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-white" />
+                        주소 복사 완료!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-slate-600" />
+                        주소(URL) 직접 복사하기
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {copySuccess && (
+                  <div className="text-[10px] text-teal-800 font-bold bg-teal-50 border border-teal-100 p-2 rounded-lg text-center animate-fadeIn">
+                    👍 주소가 복사되었습니다! 크롬(Chrome)이나 사파리(Safari) 앱 주소바에 붙여넣어 접속해 주세요.
+                  </div>
+                )}
+
+                {/* Manual guide for KakaoTalk default features */}
+                <div className="border-t border-amber-200/50 pt-2.5 text-[11px] text-amber-800 space-y-1">
+                  <strong className="block text-slate-900">💡 카카오톡 기본 메뉴로 여는 방법 (권장):</strong>
+                  <ul className="list-disc pl-4 space-y-1 text-slate-700">
+                    <li>
+                      <strong>아이폰(iOS):</strong> 카카오톡 화면 우측 하단의 <strong className="text-amber-950">더보기(...) 버튼</strong> 또는 인터넷 창의 <strong className="text-amber-950 font-bold">오른쪽 하단 점 3개(⋯)</strong>를 누르신 뒤 <strong className="text-amber-950">[기본 브라우저로 열기]</strong>를 누르면 사파리(Safari)로 이동합니다.
+                    </li>
+                    <li>
+                      <strong>안드로이드(Android):</strong> 카카오톡 화면 우측 하단의 <strong className="text-amber-950 font-bold">더보기(⋮ 또는 ☰)</strong> 메뉴를 누르신 후 <strong className="text-amber-950 font-bold font-sans">[다른 브라우저로 열기]</strong>를 터치해 주시면 크롬(Chrome)으로 자동 이동합니다.
+                    </li>
+                  </ul>
+                </div>
+
               </div>
             </div>
           </div>
