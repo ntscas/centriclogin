@@ -838,7 +838,7 @@ export default function App() {
       )}
 
       {/* MAIN CONTENT AREA */}
-      <main className={`w-full ${loggedInMember ? 'max-w-full px-[2px]' : 'max-w-6xl px-4'} mx-auto py-6 flex-1 flex flex-col justify-start text-sans`} id="app_main_content">
+      <main className={`w-full ${loggedInMember ? 'max-w-full px-[2px] pt-0 pb-0' : 'max-w-6xl px-4 py-6'} mx-auto flex-1 flex flex-col justify-start text-sans`} id="app_main_content">
         {/* Dynamic Transition Canvas */}
         <AnimatePresence mode="wait">
           <motion.div
