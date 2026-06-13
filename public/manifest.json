@@ -1,0 +1,24 @@
+{
+  "name": "CENTRIC AI",
+  "short_name": "CENTRIC AI",
+  "description": "Centric Tax AI Assistant Hub - 스마트한 세무 관리 플랫폼",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0d9488",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "maskable"
+    }
+  ]
+}
