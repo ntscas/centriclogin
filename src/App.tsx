@@ -19,6 +19,7 @@ import MemberProfile from './components/MemberProfile';
 import AdminConsole from './components/AdminConsole';
 import CentricAIHub from './components/CentricAIHub';
 import TaxExpertList from './components/TaxExpertList';
+import CorporateMemberView from './components/CorporateMemberView';
 
 // =========================================================================
 // ⚙️ [구글 스프레드시트 아이디 설정]
@@ -373,13 +374,15 @@ export default function App() {
       const isTaxtalkTrue = loggedInMember.taxtalk?.toUpperCase() === 'TRUE';
 
       if (!isAiTrue && !isNcentricTrue && !isTaxtalkTrue) {
-        setIframeSrc('');
+        setIframeSrc('corporate-member');
       } else if (isAiTrue) {
         setIframeSrc('https://centrictax.vercel.app/');
       } else if (isNcentricTrue) {
         setIframeSrc('https://centrictax.vercel.app/centric_pro.html');
-      } else {
+      } else if (isTaxtalkTrue) {
         setIframeSrc('https://ntscas.github.io/taxexpertboard/');
+      } else {
+        setIframeSrc('corporate-member');
       }
     } else {
       setIframeSrc('https://centrictax.vercel.app/');
@@ -957,7 +960,7 @@ export default function App() {
                           </button>
                         )}
 
-                        {loggedInMember?.taxtalk?.toUpperCase() === 'TRUE' && (
+                        {loggedInMember?.taxtalk?.toUpperCase() === 'TRUE' ? (
                           <button
                             type="button"
                             onClick={() => {
@@ -974,6 +977,24 @@ export default function App() {
                             <MessageSquare className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 shrink-0" />
                             <span className="hidden xs:inline">게시판</span>
                             <span className="xs:hidden">게시판</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIframeSrc('corporate-member');
+                              window.scrollTo({ top: 0, behavior: 'instant' });
+                            }}
+                            className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
+                              iframeSrc === 'corporate-member'
+                                ? 'bg-teal-600 text-white ring-1 ring-teal-600'
+                                : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
+                            }`}
+                            id="view_corporate_member_btn"
+                          >
+                            <Users className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 shrink-0" />
+                            <span className="hidden xs:inline">기업회원</span>
+                            <span className="xs:hidden">기업회원</span>
                           </button>
                         )}
 
@@ -1009,6 +1030,8 @@ export default function App() {
                           <p className="font-semibold text-lg text-slate-700">이용할 수 있는 메뉴가 없습니다.</p>
                           <p className="text-sm text-slate-400 mt-1">관리자에게 메뉴 활성화 권한을 확인해 주세요.</p>
                         </div>
+                      ) : iframeSrc === 'corporate-member' ? (
+                        <CorporateMemberView userName={loggedInMember?.name} />
                       ) : iframeSrc === 'https://centrictax.vercel.app/' ? (
                         <CentricAIHub key={`centric_ai_hub_${centricAiResetTrigger}`} />
                       ) : iframeSrc === 'https://centrictax.vercel.app/centric_pro.html' ? (
