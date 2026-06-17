@@ -743,7 +743,6 @@ export default function App() {
         removePersistentItem('auto_login_enabled');
         removePersistentItem('logged_in_member_data');
       }
-      triggerToast(`${match.name}님 로그인 성공!`);
       return true;
     } else {
       setErrorMsg('존재하지 않는 회원 번호이거나 비밀번호가 맞지 않습니다.');
