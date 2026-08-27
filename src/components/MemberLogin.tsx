@@ -206,6 +206,14 @@ export default function MemberLogin({
       {/* Visual Header */}
       <div className="bg-slate-900 px-6 py-5 text-center relative overflow-hidden" id="login_visual_header">
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(100,116,139,0.15),transparent)] pointer-events-none" />
+        <div className="flex justify-center mb-2">
+          <img 
+            src="/icon.svg" 
+            alt="CENTRIC AI" 
+            className="w-12 h-12 rounded-2xl shadow-lg ring-2 ring-white/10"
+            referrerPolicy="no-referrer"
+          />
+        </div>
         <h2 className="text-xl font-bold font-sans tracking-tight text-white">
           {isSignUp ? '신규 회원가입' : '사용자 로그인'}
         </h2>
