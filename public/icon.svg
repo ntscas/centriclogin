@@ -1,65 +1,57 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
-    <style>
-      @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-      .korean-text {
-        font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
-        font-weight: 900;
-        letter-spacing: -2px;
-      }
-    </style>
-    <!-- Background Dark-to-Blue Linear Gradient -->
-    <linearGradient id="baseBg" x1="20%" y1="0%" x2="80%" y2="100%">
-      <stop offset="0%" stop-color="#0a1b52" />
-      <stop offset="30%" stop-color="#123b9e" />
-      <stop offset="60%" stop-color="#1d4ed8" />
-      <stop offset="100%" stop-color="#3b82f6" />
-    </linearGradient>
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 20010904//EN"
+ "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
+<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
+ width="371.000000pt" height="371.000000pt" viewBox="0 0 371.000000 371.000000"
+ preserveAspectRatio="xMidYMid meet">
 
-    <!-- Bottom-Left Glowing Cyan Radial Gradient -->
-    <radialGradient id="cyanGlow" cx="5%" cy="95%" r="85%">
-      <stop offset="0%" stop-color="#22d3ee" stop-opacity="1" />
-      <stop offset="35%" stop-color="#06b6d4" stop-opacity="0.85" />
-      <stop offset="65%" stop-color="#0284c7" stop-opacity="0.35" />
-      <stop offset="100%" stop-color="#0284c7" stop-opacity="0" />
-    </radialGradient>
-
-    <!-- Bottom-Right Violet/Blue Radial Gradient -->
-    <radialGradient id="purpleGlow" cx="95%" cy="95%" r="75%">
-      <stop offset="0%" stop-color="#4338ca" stop-opacity="0.95" />
-      <stop offset="50%" stop-color="#2563eb" stop-opacity="0.4" />
-      <stop offset="100%" stop-color="#1e3a8a" stop-opacity="0" />
-    </radialGradient>
-
-    <!-- Soft Light Tint for AI text -->
-    <linearGradient id="aiGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" />
-      <stop offset="100%" stop-color="#e2f5fb" />
-    </linearGradient>
-  </defs>
-
-  <!-- App Icon Squircle Background -->
-  <rect width="512" height="512" rx="112" fill="url(#baseBg)" />
-  <rect width="512" height="512" rx="112" fill="url(#cyanGlow)" />
-  <rect width="512" height="512" rx="112" fill="url(#purpleGlow)" />
-
-  <!-- Top Hangul: 센트릭 -->
-  <text 
-    x="256" 
-    y="210" 
-    text-anchor="middle" 
-    fill="#ffffff" 
-    font-size="94" 
-    class="korean-text"
-  >센트릭</text>
-
-  <!-- Bottom English: AI (Stylized Rounded Vector) -->
-  <g fill="none" stroke="url(#aiGrad)" stroke-width="46" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Letter 'A' -->
-    <path d="M 166 405 L 222 268 L 278 405" />
-    <path d="M 188 348 L 256 348" />
-
-    <!-- Letter 'I' -->
-    <path d="M 346 268 L 346 405" />
-  </g>
+<g transform="translate(0.000000,371.000000) scale(0.100000,-0.100000)"
+fill="#000000" stroke="none">
+<path d="M167 3694 c-70 -22 -131 -86 -153 -161 -16 -53 -17 -120 -11 -793 5
+-681 7 -735 23 -747 10 -7 22 -9 28 -5 14 11 88 3 102 -10 3 -4 17 -4 30 -2
+14 3 24 0 24 -7 0 -8 6 -7 17 2 9 8 14 9 10 2 -5 -7 11 -15 46 -24 54 -13 87
+-27 99 -44 5 -6 8 -5 8 3 0 9 8 7 26 -7 15 -11 30 -18 34 -16 5 3 11 1 15 -5
+4 -6 11 -8 16 -5 5 4 9 1 9 -6 0 -7 3 -9 7 -6 3 4 13 1 22 -7 9 -8 22 -16 30
+-18 8 -2 28 -14 43 -28 16 -14 42 -32 58 -41 16 -9 26 -20 22 -24 -4 -4 0 -6
+8 -3 8 2 23 -6 33 -19 10 -13 23 -23 29 -23 9 0 32 -18 89 -72 11 -10 23 -18
+29 -18 6 0 10 -3 10 -7 0 -5 14 -17 30 -28 16 -11 30 -25 30 -30 0 -6 18 -22
+39 -35 21 -14 37 -28 34 -32 -2 -5 0 -8 5 -8 16 0 101 -87 94 -95 -4 -5 -2 -5
+4 -2 6 4 20 -4 30 -18 10 -13 21 -22 26 -19 4 3 8 -2 8 -11 0 -9 5 -13 10 -10
+6 3 10 -1 10 -9 0 -54 26 18 100 280 49 172 92 306 103 321 35 44 74 53 229
+53 79 0 160 -5 180 -10 70 -20 74 -29 231 -583 81 -284 147 -522 147 -530 0
+-25 -42 -69 -84 -88 -52 -24 -130 -24 -181 0 -49 22 -59 43 -111 229 l-37 132
+-137 0 -138 0 -6 -27 c-4 -16 -9 -36 -12 -45 -3 -10 7 -29 26 -48 16 -17 30
+-37 30 -45 0 -8 5 -15 11 -15 5 0 7 5 4 11 -4 6 2 5 14 -3 24 -15 27 -24 8
+-31 -7 -3 -5 -6 6 -6 9 -1 17 -5 17 -10 0 -5 9 -13 20 -16 11 -3 20 -13 20
+-21 0 -8 4 -12 10 -9 5 3 10 1 10 -5 0 -6 11 -22 25 -35 13 -14 21 -25 17 -25
+-4 0 13 -18 37 -40 26 -24 50 -39 59 -35 12 5 13 3 2 -10 -11 -14 -10 -17 7
+-21 11 -3 26 -20 34 -37 8 -18 21 -32 29 -32 8 0 15 -7 15 -15 1 -8 7 -14 14
+-12 8 2 11 -3 8 -12 -4 -9 -1 -15 5 -13 7 1 19 -13 28 -31 9 -18 20 -29 25
+-25 4 4 5 0 2 -9 -6 -16 3 -23 25 -19 4 0 5 -8 3 -19 -2 -11 0 -20 5 -20 4 0
+13 -13 19 -30 5 -16 14 -30 18 -30 5 0 9 -10 10 -22 1 -12 13 -32 27 -44 16
+-15 23 -32 22 -48 -2 -14 0 -23 5 -21 6 4 19 -20 24 -45 12 -62 18 -80 28 -80
+8 0 9 -3 1 -8 -10 -6 -12 -77 -3 -87 3 -2 315 -5 694 -7 l690 -3 50 26 c62 31
+110 93 124 159 8 36 11 538 11 1674 0 1825 6 1691 -75 1771 -80 81 56 75
+-1784 74 -1417 0 -1642 -2 -1684 -15z m1173 -1099 l0 -255 -60 0 -60 0 0 83
+-1 82 -39 -45 -40 -45 -54 59 -53 59 -39 -43 c-36 -40 -101 -79 -131 -80 -9 0
+-13 20 -13 68 0 60 2 68 22 77 49 22 83 100 94 218 l7 67 65 0 65 0 -7 -52
+c-4 -29 -9 -71 -12 -93 -5 -39 -3 -42 65 -110 l71 -69 0 57 0 57 -40 0 -40 0
+0 65 0 65 40 0 40 0 0 45 0 45 60 0 60 0 0 -255z m170 -5 l0 -260 -60 0 -60 0
+0 260 0 260 60 0 60 0 0 -260z m1360 40 l0 -220 -65 0 -65 0 0 220 0 220 65 0
+65 0 0 -220z m-220 85 l0 -125 -135 0 -135 0 0 -26 0 -26 143 4 c78 2 150 8
+160 12 15 7 17 2 17 -47 l0 -55 -50 -11 c-28 -6 -130 -11 -225 -11 l-175 0 0
+130 0 130 135 0 c128 0 135 1 135 20 0 19 -7 20 -135 20 l-135 0 0 55 0 55
+200 0 200 0 0 -125z m-472 58 l-3 -58 -232 -3 -233 -2 0 -25 0 -25 228 -2 227
+-3 0 -55 0 -55 -227 -3 -228 -2 0 -25 0 -25 235 0 235 0 0 -60 0 -60 -300 0
+-300 0 0 230 0 230 300 0 301 0 -3 -57z m-1140 -440 l3 -53 240 0 239 0 0 -65
+0 -65 -310 0 -310 0 0 113 c0 63 3 117 7 121 4 4 34 6 68 4 l60 -3 3 -52z
+m1832 -68 l0 -125 -65 0 -65 0 0 65 0 65 -232 2 -233 3 -3 58 -3 57 301 0 300
+0 0 -125z m-660 -25 l0 -60 -312 0 c-172 0 -323 -3 -335 -6 -22 -6 -23 -4 -23
+60 l0 66 335 0 335 0 0 -60z m350 -292 c83 -42 80 -22 80 -604 l0 -511 -23
+-34 c-61 -92 -213 -92 -274 0 l-23 34 0 511 c0 466 2 514 18 546 20 42 89 80
+142 80 20 0 56 -10 80 -22z"/>
+<path d="M1620 1741 c0 -13 -25 -129 -55 -258 -30 -130 -55 -242 -55 -249 0
+-11 25 -14 124 -14 l123 0 -32 143 c-18 78 -46 196 -61 262 -27 117 -44 162
+-44 116z"/>
+</g>
 </svg>
