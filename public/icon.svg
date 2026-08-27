@@ -1,48 +1,65 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="tealGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#032b2f" />
-      <stop offset="50%" stop-color="#0d9488" />
-      <stop offset="100%" stop-color="#14b8a6" />
+    <style>
+      @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+      .korean-text {
+        font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+        font-weight: 900;
+        letter-spacing: -2px;
+      }
+    </style>
+    <!-- Background Dark-to-Blue Linear Gradient -->
+    <linearGradient id="baseBg" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#0a1b52" />
+      <stop offset="30%" stop-color="#123b9e" />
+      <stop offset="60%" stop-color="#1d4ed8" />
+      <stop offset="100%" stop-color="#3b82f6" />
     </linearGradient>
-    <linearGradient id="goldGrad" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#115e59" />
-      <stop offset="30%" stop-color="#0d9488" />
-      <stop offset="70%" stop-color="#2dd4bf" />
-      <stop offset="100%" stop-color="#99f6e4" />
+
+    <!-- Bottom-Left Glowing Cyan Radial Gradient -->
+    <radialGradient id="cyanGlow" cx="5%" cy="95%" r="85%">
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="1" />
+      <stop offset="35%" stop-color="#06b6d4" stop-opacity="0.85" />
+      <stop offset="65%" stop-color="#0284c7" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Bottom-Right Violet/Blue Radial Gradient -->
+    <radialGradient id="purpleGlow" cx="95%" cy="95%" r="75%">
+      <stop offset="0%" stop-color="#4338ca" stop-opacity="0.95" />
+      <stop offset="50%" stop-color="#2563eb" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#1e3a8a" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Soft Light Tint for AI text -->
+    <linearGradient id="aiGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e2f5fb" />
     </linearGradient>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.3" />
-    </filter>
   </defs>
-  <!-- Background -->
-  <rect width="512" height="512" rx="128" fill="url(#tealGrad)" />
-  
-  <!-- Outer Ring Accent -->
-  <rect x="24" y="24" width="464" height="464" rx="104" fill="none" stroke="url(#goldGrad)" stroke-width="4" stroke-opacity="0.4" />
-  
-  <!-- Central Glowing Emblem -->
-  <g filter="url(#shadow)">
-    <!-- Main Stylized Logo Core (Abstract C shape with AI Sparkles) -->
-    <path d="M 330 160 
-             C 210 140, 150 200, 150 256 
-             C 150 312, 210 372, 330 352" 
-          fill="none" 
-          stroke="url(#goldGrad)" 
-          stroke-width="52" 
-          stroke-linecap="round" 
-          stroke-linejoin="round" />
-          
-    <path d="M 280 256
-             L 370 256"
-          fill="none"
-          stroke="url(#goldGrad)"
-          stroke-width="36"
-          stroke-linecap="round" />
+
+  <!-- App Icon Squircle Background -->
+  <rect width="512" height="512" rx="112" fill="url(#baseBg)" />
+  <rect width="512" height="512" rx="112" fill="url(#cyanGlow)" />
+  <rect width="512" height="512" rx="112" fill="url(#purpleGlow)" />
+
+  <!-- Top Hangul: 센트릭 -->
+  <text 
+    x="256" 
+    y="210" 
+    text-anchor="middle" 
+    fill="#ffffff" 
+    font-size="94" 
+    class="korean-text"
+  >센트릭</text>
+
+  <!-- Bottom English: AI (Stylized Rounded Vector) -->
+  <g fill="none" stroke="url(#aiGrad)" stroke-width="46" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Letter 'A' -->
+    <path d="M 166 405 L 222 268 L 278 405" />
+    <path d="M 188 348 L 256 348" />
+
+    <!-- Letter 'I' -->
+    <path d="M 346 268 L 346 405" />
   </g>
-  
-  <!-- Sparkle Stars representing AI Intelligence -->
-  <path d="M 390 140 L 395 155 L 410 160 L 395 165 L 390 180 L 385 165 L 370 160 L 385 155 Z" fill="#2dd4bf" />
-  <path d="M 120 380 L 123 390 L 133 393 L 123 396 L 120 406 L 117 396 L 107 393 L 117 390 Z" fill="#99f6e4" />
-  <path d="M 380 370 L 382 376 L 388 378 L 382 380 L 380 386 L 378 380 L 372 378 L 378 376 Z" fill="#2dd4bf" opacity="0.8" />
 </svg>
