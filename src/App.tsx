@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Building2, Users, Settings, Database, RefreshCw, LogOut, 
   FileSpreadsheet, Sparkles, AlertTriangle, CheckCircle2, Phone, Home, ShieldCheck,
-  ExternalLink, MessageSquare, Smartphone
+  ExternalLink, MessageSquare, Smartphone, User
 } from 'lucide-react';
 
 import { UserRow, SpreadsheetConfig } from './types';
@@ -890,33 +890,21 @@ export default function App() {
               <div className={`flex-1 flex flex-col justify-start w-full ${loggedInMember ? 'py-0' : 'py-4'}`} id="member_portal_view">
                 {loggedInMember ? (
                   <div className="w-full flex-1 flex flex-col space-y-0" id="embedded_pro_portal">
-                    {/* Embedded Session Bar / User Management Sub-Header (Optimized for Mobile Single-Row) */}
-                    <div className="w-full bg-white/95 backdrop-blur-md border border-slate-100 rounded-t-2xl md:rounded-t-3xl rounded-b-none py-1 px-2.5 md:py-2 md:px-4 shadow-sm flex flex-row items-center justify-between gap-1 md:gap-4 sticky top-0 z-30" id="session_control_bar">
-                      <div 
+                    {/* Embedded Session Bar / User Management Sub-Header (Auto-fit Width, No Scrollbar) */}
+                    <div className="w-full bg-white/95 backdrop-blur-md border border-slate-100 rounded-t-2xl md:rounded-t-3xl rounded-b-none py-1.5 px-2 sm:px-3 md:py-2.5 md:px-4 shadow-sm flex flex-row items-center justify-between gap-1.5 sm:gap-2 md:gap-3 sticky top-0 z-30" id="session_control_bar">
+                      {/* Left: User Profile Icon Button (Icon Only) */}
+                      <button 
+                        type="button"
                         onClick={() => setIsProfileOpen(true)}
-                        className="flex items-center gap-1.5 md:gap-3 cursor-pointer hover:bg-slate-50 p-0.5 -m-0.5 rounded-xl transition-all duration-150 group active:scale-98 min-w-0"
+                        className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-xl md:rounded-2xl bg-teal-500/10 text-teal-700 hover:bg-teal-600 hover:text-white border border-teal-500/20 hover:border-teal-600 flex items-center justify-center font-bold transition-all duration-150 group active:scale-95 shrink-0 shadow-xs cursor-pointer"
                         id="session_profile_click_area"
-                        title="내 프로필 정보 보기"
-                        role="button"
+                        title={`내 프로필: ${loggedInMember.name} (${loggedInMember.phoneNumber.slice(-4)})`}
                       >
-                        <div className="w-6.5 h-6.5 md:w-9 md:h-9 rounded-lg md:rounded-xl bg-teal-500/10 text-teal-600 flex items-center justify-center font-bold group-hover:bg-teal-600 group-hover:text-white transition-all duration-200 shadow-xs text-[10px] md:text-base shrink-0">
-                          {loggedInMember.name[0]}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="hidden xs:flex text-[8px] md:text-[10px] text-slate-400 font-sans font-medium items-center gap-1 leading-none mb-0.5 md:mb-1">
-                            인증 회원 세션 활성화
-                            <span className="text-[7.5px] md:text-[9px] bg-slate-100 text-slate-500 px-1 py-0.2 rounded font-normal shrink-0 group-hover:bg-teal-50 group-hover:text-teal-600 transition-colors">프로필</span>
-                          </div>
-                          <div className="xs:hidden text-[7px] text-slate-400 font-sans font-medium mb-0.5 whitespace-nowrap">
-                            인증세션
-                          </div>
-                          <h4 className="text-[10px] md:text-sm font-bold text-slate-800 font-sans group-hover:text-teal-700 transition-colors leading-none truncate">
-                            {loggedInMember.name} <span className="font-normal text-slate-400 text-[8px] md:text-xs">({loggedInMember.phoneNumber.slice(-4)})</span>
-                          </h4>
-                        </div>
-                      </div>
+                        <User className="w-4.5 h-4.5 sm:w-5 sm:h-5 md:w-6 md:h-6 shrink-0" />
+                      </button>
 
-                      <div className="flex items-center gap-1 md:gap-2 shrink-0">
+                      {/* Right: Auto-fitting Navigation Action Buttons */}
+                      <div className="flex-1 flex items-center justify-end gap-1 sm:gap-1.5 md:gap-2 min-w-0">
                         {loggedInMember?.ai?.toUpperCase() === 'TRUE' && (
                           <button
                             type="button"
@@ -925,16 +913,15 @@ export default function App() {
                               setCentricAiResetTrigger(prev => prev + 1);
                               window.scrollTo({ top: 0, behavior: 'instant' });
                             }}
-                            className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
+                            className={`flex-1 sm:flex-initial px-2 py-1.5 sm:px-3.5 sm:py-2 md:px-4.5 text-xs sm:text-sm md:text-base font-bold rounded-xl transition flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shadow-xs whitespace-nowrap min-w-0 ${
                               iframeSrc === 'https://centrictax.vercel.app/'
                                 ? 'bg-teal-600 text-white ring-1 ring-teal-600'
                                 : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
                             }`}
                             id="view_centric_ai_btn"
                           >
-                            <Sparkles className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 text-amber-500 shrink-0" />
-                            <span className="hidden xs:inline">CENTRIC AI</span>
-                            <span className="xs:hidden">CENTRIC AI</span>
+                            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500 shrink-0" />
+                            <span>AI</span>
                           </button>
                         )}
 
@@ -946,16 +933,14 @@ export default function App() {
                               setExpertResetTrigger(prev => prev + 1);
                               window.scrollTo({ top: 0, behavior: 'instant' });
                             }}
-                            className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
+                            className={`flex-1 sm:flex-initial px-2 py-1.5 sm:px-3.5 sm:py-2 md:px-4.5 text-xs sm:text-sm md:text-base font-bold rounded-xl transition text-center cursor-pointer shadow-xs whitespace-nowrap min-w-0 ${
                               iframeSrc === 'https://centrictax.vercel.app/centric_pro.html'
                                 ? 'bg-teal-600 text-white ring-1 ring-teal-600'
                                 : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
                             }`}
                             id="view_centric_pro_btn"
                           >
-                            <Building2 className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 shrink-0" />
-                            <span className="hidden xs:inline">조세전문가</span>
-                            <span className="xs:hidden">조세전문가</span>
+                            조세전문가
                           </button>
                         )}
 
@@ -966,16 +951,14 @@ export default function App() {
                               setIframeSrc('https://ntscas.github.io/taxexpertboard/');
                               window.scrollTo({ top: 0, behavior: 'instant' });
                             }}
-                            className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
+                            className={`flex-1 sm:flex-initial px-2 py-1.5 sm:px-3.5 sm:py-2 md:px-4.5 text-xs sm:text-sm md:text-base font-bold rounded-xl transition text-center cursor-pointer shadow-xs whitespace-nowrap min-w-0 ${
                               iframeSrc === 'https://ntscas.github.io/taxexpertboard/'
                                 ? 'bg-teal-600 text-white ring-1 ring-teal-600'
                                 : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
                             }`}
                             id="view_centric_board_btn"
                           >
-                            <MessageSquare className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 shrink-0" />
-                            <span className="hidden xs:inline">게시판</span>
-                            <span className="xs:hidden">게시판</span>
+                            게시판
                           </button>
                         ) : (
                           <button
@@ -984,39 +967,25 @@ export default function App() {
                               setIframeSrc('corporate-member');
                               window.scrollTo({ top: 0, behavior: 'instant' });
                             }}
-                            className={`px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs ${
+                            className={`flex-1 sm:flex-initial px-2 py-1.5 sm:px-3.5 sm:py-2 md:px-4.5 text-xs sm:text-sm md:text-base font-bold rounded-xl transition text-center cursor-pointer shadow-xs whitespace-nowrap min-w-0 ${
                               iframeSrc === 'corporate-member'
                                 ? 'bg-teal-600 text-white ring-1 ring-teal-600'
                                 : 'bg-white ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50'
                             }`}
                             id="view_corporate_member_btn"
                           >
-                            <Users className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 shrink-0" />
-                            <span className="hidden xs:inline">기업회원</span>
-                            <span className="xs:hidden">기업회원</span>
+                            기업회원
                           </button>
                         )}
 
                         <button
                           type="button"
                           onClick={deferredPrompt ? handleInstallApp : () => setShowInstallModal(true)}
-                          className="px-2 py-1 md:px-4 md:py-2 text-[9px] md:text-xs font-semibold rounded-lg md:rounded-xl transition bg-teal-50 text-teal-700 hover:bg-teal-100 ring-1 ring-teal-200/60 flex items-center gap-1 md:gap-1.5 cursor-pointer shadow-xs"
+                          className="flex-1 sm:flex-initial px-2 py-1.5 sm:px-3.5 sm:py-2 md:px-4.5 text-xs sm:text-sm md:text-base font-bold rounded-xl transition bg-teal-50 text-teal-700 hover:bg-teal-100 ring-1 ring-teal-200/60 text-center cursor-pointer shadow-xs whitespace-nowrap min-w-0"
                           id="header_pwa_install_btn"
                           title="스마트폰/PC 홈 화면에 CENTRIC AI 앱 설치하기"
                         >
-                          <Smartphone className="w-2.5 md:w-3.5 h-2.5 md:h-3.5 text-teal-600 shrink-0 animate-pulse" />
-                          <span className="hidden xs:inline">Centric AI 앱 설치</span>
-                          <span className="xs:hidden">앱 설치</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleLogout}
-                          className="p-1 md:p-2.5 bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100 rounded-lg md:rounded-xl transition flex items-center justify-center cursor-pointer shadow-xs"
-                          id="session_logout_btn"
-                          title="로그아웃"
-                        >
-                          <LogOut className="w-3 md:w-4 h-3 md:h-4 shrink-0" />
+                          앱 설치
                         </button>
                       </div>
                     </div>
@@ -1127,8 +1096,8 @@ export default function App() {
               className="relative z-10 w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]"
             >
               <div className="p-6 bg-gradient-to-r from-teal-800 to-teal-700 text-white flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">📱</span>
+                <div className="flex items-center gap-2.5">
+                  <img src="/icon.svg" alt="CENTRIC AI" className="w-8 h-8 rounded-lg shadow-sm ring-1 ring-white/20 shrink-0" referrerPolicy="no-referrer" />
                   <div>
                     <h3 className="font-bold text-sm tracking-tight">홈 화면에 CENTRIC AI 앱 설치</h3>
                     <p className="text-[10px] text-teal-100/80">바탕화면에서 터치 한 번으로 즉시 이용하세요!</p>
