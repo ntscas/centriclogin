@@ -1,8 +1,9 @@
-const CACHE_NAME = 'centric-ai-cache-v2';
+const CACHE_NAME = 'centric-ai-cache-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './manifest.json',
+  './icon.png',
   './icon.svg'
 ];
 
