@@ -9,9 +9,10 @@ import {
 import { UserRow, SpreadsheetConfig } from './types';
 import { initAuth, googleSignIn, logout as googleSignOut, getAccessToken, db } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { 
-  fetchUserRows, fetchPublicUserRows, createDatabaseSpreadsheet, appendUserRow, 
-  overwriteUsers, extractSpreadsheetId, ensureBoardSheet
+import {
+  fetchUserRows, fetchPublicUserRows, createDatabaseSpreadsheet, appendUserRow,
+  overwriteUsers, extractSpreadsheetId, ensureBoardSheet,
+  fetchSupabaseUsers, deleteSupabaseUser
 } from './lib/googleSheets';
 
 import MemberLogin from './components/MemberLogin';
@@ -270,10 +271,10 @@ export default function App() {
         }
       }
 
-      // Background download of actual Google sheet user database entries (so logins actually work live!)
-      if (savedSheetId) {
+      // Background download of Supabase user database entries (so logins actually work live!)
+      {
         try {
-          const rows = await fetchPublicUserRows(savedSheetId);
+          const rows = await fetchSupabaseUsers();
           if (rows && rows.length > 0 && isSubscribed) {
             setUsers(rows);
             setIsDataLoadedFromSheet(true);
@@ -767,13 +768,13 @@ export default function App() {
       setUsers(updatedList);
       setPersistentItem('g_sheets_cached_users', JSON.stringify(updatedList));
 
-      // If connected live to Google spreadsheet, append immediately
-      if (googleToken && connectedSheet) {
-        await appendUserRow(googleToken, connectedSheet.spreadsheetId, newUser);
-        // Refresh local rows to be sure
-        await fetchUserRows(googleToken, connectedSheet.spreadsheetId);
-      }
-      
+      // Supabase centric_users에 즉시 등록 (구글 연동 여부 무관)
+      await appendUserRow('', '', newUser);
+      // Refresh local rows from Supabase to be sure
+      const refreshed = await fetchUserRows('', '');
+      setUsers(refreshed);
+      setPersistentItem('g_sheets_cached_users', JSON.stringify(refreshed));
+
       triggerToast(`${newUser.name}님이 성공적으로 데이터베이스에 추가되었습니다.`);
       return true;
     } catch (err: any) {
@@ -797,12 +798,9 @@ export default function App() {
       setUsers(updatedList);
       setPersistentItem('g_sheets_cached_users', JSON.stringify(updatedList));
 
-      if (googleToken && connectedSheet) {
-        await overwriteUsers(googleToken, connectedSheet.spreadsheetId, updatedList);
-        triggerToast('구글 시트의 전체 멤버를 안전하게 재정렬하여 삭제했습니다.');
-      } else {
-        triggerToast('가상 데이터베이스의 회원 행을 삭제했습니다.');
-      }
+      // Supabase centric_users에서 즉시 삭제 (구글 연동 여부 무관)
+      await deleteSupabaseUser(phoneNumber);
+      triggerToast('Supabase 회원 데이터베이스에서 삭제했습니다.');
       return true;
     } catch (err: any) {
       console.error(err);

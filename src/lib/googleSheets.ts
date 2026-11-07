@@ -16,6 +16,101 @@ export function extractSpreadsheetId(url: string): string | null {
   return match ? match[1] : url.trim();
 }
 
+// =============================================================
+// Supabase 사용자 DB 연동 (구글시트 Users 탭을 대체, 2026-11-07)
+// 계정 데이터: centric_users 테이블 (phone/password/name/email/role/regdate
+//             /ai/ncentric/taxtalk/company/note)
+// =============================================================
+export const SUPABASE_URL = 'https://agwcumknhangcyhusfsn.supabase.co';
+export const SUPABASE_KEY = 'sb_publishable_FCIW6wEhq4EjutDW2rPIIA_IaGLAMkK';
+
+const sbHeaders = {
+  'apikey': SUPABASE_KEY,
+  'Authorization': `Bearer ${SUPABASE_KEY}`,
+  'Accept': 'application/json',
+};
+
+interface SupabaseAccountRow {
+  phone: string;
+  password: string;
+  name?: string | null;
+  email?: string | null;
+  role?: string | null;      // 기타 정보(세무사/회계사/관리자 등)
+  regdate?: string | null;   // 등록일
+  ai?: boolean;
+  ncentric?: boolean;
+  taxtalk?: boolean;
+  company?: string | null;
+  note?: string | null;
+}
+
+/** Supabase 계정 행 → 사이트 UserRow 구조 (ai 등은 'TRUE'/'FALSE' 문자열) */
+export function toUserRow(sb: SupabaseAccountRow): UserRow {
+  return {
+    phoneNumber: (sb.phone || '').trim(),
+    password: (sb.password || '').trim(),
+    name: (sb.name || '').trim(),
+    email: (sb.email || '').trim(),
+    otherInfo: (sb.role || '').trim(),
+    registeredDate: sb.regdate ? String(sb.regdate).slice(0, 10) : '',
+    ai: sb.ai ? 'TRUE' : 'FALSE',
+    ncentric: sb.ncentric ? 'TRUE' : 'FALSE',
+    taxtalk: sb.taxtalk ? 'TRUE' : 'FALSE',
+  };
+}
+
+/** UserRow → Supabase 행 */
+function toSupabaseRow(u: UserRow): SupabaseAccountRow {
+  return {
+    phone: (u.phoneNumber || '').trim(),
+    password: (u.password || '0000').trim(),
+    name: u.name || null,
+    email: u.email || null,
+    role: u.otherInfo || null,
+    regdate: (u.registeredDate && u.registeredDate.slice(0, 10)) || null,
+    ai: (u.ai || '').toUpperCase() !== 'FALSE',
+    ncentric: (u.ncentric || '').toUpperCase() === 'TRUE',
+    taxtalk: (u.taxtalk || '').toUpperCase() === 'TRUE',
+  };
+}
+
+/** Supabase centric_users 전체 조회 */
+export async function fetchSupabaseUsers(): Promise<UserRow[]> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/centric_users?select=*&limit=1000`, {
+    headers: sbHeaders,
+  });
+  if (!res.ok) {
+    throw new Error(`Supabase 사용자 DB 조회 실패 (${res.status})`);
+  }
+  const rows: SupabaseAccountRow[] = await res.json();
+  return (rows || []).filter(r => r.phone).map(toUserRow);
+}
+
+/** Supabase centric_users에 계정 추가 */
+export async function appendSupabaseUser(user: UserRow): Promise<void> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/centric_users`, {
+    method: 'POST',
+    headers: { ...sbHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify(toSupabaseRow(user)),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Supabase 사용자 등록 실패: ${t}`);
+  }
+}
+
+/** Supabase에서 계정 삭제 */
+export async function deleteSupabaseUser(phoneNumber: string): Promise<void> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/centric_users?phone=eq.${encodeURIComponent(phoneNumber)}`,
+    { method: 'DELETE', headers: { ...sbHeaders, 'Content-Type': 'application/json' } }
+  );
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Supabase 사용자 삭제 실패: ${t}`);
+  }
+}
+
 /**
  * Creates a new spreadsheet in the user's Google Drive with a 'Users' sheet
  */
@@ -84,189 +179,51 @@ export async function initializeHeaders(token: string, spreadsheetId: string): P
 }
 
 /**
- * Fetches all user rows from the connected spreadsheet
+ * Fetches all user rows (Supabase centric_users — 구글시트 대체, 시그니처 유지)
  */
 export async function fetchUserRows(token: string, spreadsheetId: string): Promise<UserRow[]> {
-  const response = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Users!A1:Z`,
-    {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to fetch spreadsheet data: ${errorText}. Please verify the spreadsheet ID and make sure a tab named 'Users' exists.`);
-  }
-
-  const data = await response.json();
-  const values: string[][] = data.values || [];
-
-  if (values.length === 0) {
-    return [];
-  }
-
-  // Parse headers to match columns dynamically or assume standard order:
-  // Col 0: 전화번호 (phoneNumber)
-  // Col 1: 비밀번호 (password)
-  // Col 2: 이름 (name)
-  // Col 3: 이메일 (email)
-  // Col 4: 기타 정보 (otherInfo)
-  // Col 5: 등록일 (registeredDate)
-  const header = values[0];
-  const rows = values.slice(1);
-
-  // Maps columns based on header strings or use default indices as fallback
-  const pIndex = header.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('전화번호') || s.includes('phone') || s.includes('연락처') || s.includes('tel') || s.includes('mobile') || s.includes('contact');
-  });
-  const finalPIndex = pIndex >= 0 ? pIndex : 0;
-
-  const passIndex = header.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('비밀번호') || s.includes('password') || s.includes('pw') || s.includes('pass') || s.includes('비번');
-  });
-  const finalPassIndex = passIndex >= 0 ? passIndex : 1;
-
-  const nIndex = header.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('이름') || s.includes('name') || s.includes('성명') || s.includes('고객') || s.includes('회원');
-  });
-  const finalNIndex = nIndex >= 0 ? nIndex : 2;
-
-  const eIndex = header.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('이메일') || s.includes('email') || s.includes('mail');
-  });
-  const finalEIndex = eIndex >= 0 ? eIndex : 3;
-
-  const oIndex = header.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('기타') || s.includes('info') || s.includes('note') || s.includes('소속') || s.includes('설명') || s.includes('메모') || s.includes('직급');
-  });
-  const finalOIndex = oIndex >= 0 ? oIndex : 4;
-
-  const rIndex = header.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('등록') || s.includes('date') || s.includes('가입') || s.includes('시간') || s.includes('일자');
-  });
-  const finalRIndex = rIndex >= 0 ? rIndex : 5;
-
-  const ncentIndex = header.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('ncentric');
-  });
-
-  const aiIndex = header.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s === 'ai' || s.includes('centricai');
-  });
-
-  const taxtalkIndex = header.findIndex(h => {
-    const s = h.toLowerCase().replace(/\s/g, '');
-    return s.includes('taxtalk') || s.includes('게시판');
-  });
-
-  return rows
-    .filter(row => row[finalPIndex]) // skip empty records
-    .map(row => ({
-      phoneNumber: row[finalPIndex] ? String(row[finalPIndex]).trim() : '',
-      password: row[finalPassIndex] ? String(row[finalPassIndex]).trim() : '',
-      name: row[finalNIndex] ? String(row[finalNIndex]).trim() : '',
-      email: row[finalEIndex] ? String(row[finalEIndex]).trim() : '',
-      otherInfo: row[finalOIndex] ? String(row[finalOIndex]).trim() : '',
-      registeredDate: row[finalRIndex] ? String(row[finalRIndex]).trim() : '',
-      ncentric: ncentIndex >= 0 && row[ncentIndex] ? String(row[ncentIndex]).trim() : '',
-      ai: aiIndex >= 0 && row[aiIndex] ? String(row[aiIndex]).trim() : '',
-      taxtalk: taxtalkIndex >= 0 && row[taxtalkIndex] ? String(row[taxtalkIndex]).trim() : '',
-    }));
+  return fetchSupabaseUsers();
 }
 
 /**
- * Appends a single user row to Google Sheets
+ * Appends a single user row to Supabase centric_users
  */
 export async function appendUserRow(token: string, spreadsheetId: string, user: UserRow): Promise<void> {
-  const rowData = [
-    user.phoneNumber,
-    user.password || '0000',
-    user.name,
-    user.email,
-    user.otherInfo,
-    user.registeredDate || new Date().toISOString().split('T')[0]
-  ];
-
-  const response = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Users!A1:append?valueInputOption=USER_ENTERED`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        values: [rowData],
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to append user row: ${errorText}`);
-  }
+  await appendSupabaseUser(user);
 }
 
 /**
- * Re-writes entire user records list to Users sheet, clean and neat.
+ * Re-writes entire user records list into Supabase centric_users (전체 재기록)
  */
 export async function overwriteUsers(token: string, spreadsheetId: string, users: UserRow[]): Promise<void> {
-  // 1. Clear existing list starting from row 2
+  // 1. 기존 계정 전체 삭제 (phone에 '~'가 없으므로 전 행 매칭)
   const clearResponse = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Users!A2:Z:clear`,
+    `${SUPABASE_URL}/rest/v1/centric_users?phone=neq.~`,
     {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
+      method: 'DELETE',
+      headers: { ...sbHeaders, 'Content-Type': 'application/json' },
     }
   );
 
   if (!clearResponse.ok) {
     const errorText = await clearResponse.text();
-    throw new Error(`Failed to clear sheet before overwriting: ${errorText}`);
+    throw new Error(`Supabase 전체 삭제 실패: ${errorText}`);
   }
 
   if (users.length === 0) return;
 
-  // 2. Format row values
-  const values = users.map(user => [
-    user.phoneNumber,
-    user.password || '0000',
-    user.name,
-    user.email,
-    user.otherInfo,
-    user.registeredDate
-  ]);
-
-  // 3. Write new values
-  const writeResponse = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Users!A2?valueInputOption=USER_ENTERED`,
-    {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ values }),
+  // 2. 청크 단위(200건) 재기록
+  for (let i = 0; i < users.length; i += 200) {
+    const chunk = users.slice(i, i + 200).map(toSupabaseRow);
+    const writeResponse = await fetch(`${SUPABASE_URL}/rest/v1/centric_users`, {
+      method: 'POST',
+      headers: { ...sbHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify(chunk),
+    });
+    if (!writeResponse.ok) {
+      const errorText = await writeResponse.text();
+      throw new Error(`Supabase 재기록 실패: ${errorText}`);
     }
-  );
-
-  if (!writeResponse.ok) {
-    const errorText = await writeResponse.text();
-    throw new Error(`Failed to update users sheet: ${errorText}`);
   }
 }
 
@@ -384,21 +341,8 @@ function parseCSV(text: string): UserRow[] {
  * Fetches spreadsheet rows from a publicly shared spreadsheet link
  */
 export async function fetchPublicUserRows(spreadsheetId: string): Promise<UserRow[]> {
-  // Use Google Visualization API to request the specific 'Users' sheet in CSV format
-  const urlWithSheetName = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=Users`;
-  let response = await fetch(urlWithSheetName);
-  
-  if (!response.ok) {
-    // Fallback: download the first active sheet/tab (does not filter by tab name)
-    const urlDefault = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv`;
-    response = await fetch(urlDefault);
-  }
-
-  if (!response.ok) {
-    throw new Error('전화번호/비밀번호 데이터베이스를 구글 시트에서 가져오는 데 실패했습니다. 시트 공유 설정이 "링크가 있는 모든 사용자 보기(뷰어)"로 구성되어 있는지 확인해 주세요.');
-  }
-  const text = await response.text();
-  return parseCSV(text);
+  // 구글시트 공개 CSV 대신 Supabase centric_users에서 조회 (시그니처 유지)
+  return fetchSupabaseUsers();
 }
 
 
